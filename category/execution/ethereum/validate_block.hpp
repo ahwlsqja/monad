@@ -55,7 +55,7 @@ enum class BlockError
     WrongDaoExtraData,
     WrongLogsBloom,
     InvalidGasUsed,
-    WrongMerkleRoot
+    WrongMerkleRoot,
 };
 
 struct Chain;
