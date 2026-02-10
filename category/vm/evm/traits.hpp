@@ -30,8 +30,8 @@ namespace monad
     namespace constants
     {
         inline constexpr evmc_revision EARLIEST_SUPPORTED_EVM_FORK =
-            EVMC_HOMESTEAD;
-        inline constexpr uint64_t EARLIEST_SUPPORTED_ETH_BLOCK_NUMBER = 1150000;
+            EVMC_TANGERINE_WHISTLE;
+        inline constexpr uint64_t EARLIEST_SUPPORTED_ETH_BLOCK_NUMBER = 2463000;
 
         inline constexpr size_t MAX_CODE_SIZE_EIP170 = 24 * 1024; // 0x6000
         inline constexpr size_t MAX_INITCODE_SIZE_EIP3860 =
@@ -73,6 +73,10 @@ namespace monad
     template <evmc_revision Rev>
     struct EvmTraits
     {
+        static_assert(
+            Rev >= constants::EARLIEST_SUPPORTED_EVM_FORK,
+            "EVM revision is not supported");
+
         static consteval evmc_revision evm_rev() noexcept
         {
             return Rev;
