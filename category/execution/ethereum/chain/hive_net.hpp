@@ -1,4 +1,4 @@
-// Copyright (C) 2025 Category Labs, Inc.
+// Copyright (C) 2025-26 Category Labs, Inc.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,34 +15,18 @@
 
 #pragma once
 
-#include <category/core/config.hpp>
-#include <category/execution/ethereum/db/file_db.hpp>
-
-#include <cstdint>
-#include <filesystem>
-#include <vector>
+#include <category/execution/ethereum/chain/ethereum_mainnet.hpp>
 
 MONAD_NAMESPACE_BEGIN
 
-struct Block;
-
-class BlockDb
+struct HiveNet : EthereumMainnet
 {
-    FileDb db_;
-    std::vector<Block> rlp_blocks_;
+    virtual uint256_t get_chain_id() const override;
 
-    void import_rlp(std::filesystem::path const &rlp_path);
+    virtual evmc_revision
+    get_revision(uint64_t block_number, uint64_t timestamp) const override;
 
-public:
-    BlockDb() = delete;
-    BlockDb(Block const &) = delete;
-    BlockDb(BlockDb &&) = default;
-    explicit BlockDb(
-        std::filesystem::path const &dir,
-        std::filesystem::path const &rlp_path = {});
-    ~BlockDb() = default;
-
-    bool get(uint64_t, Block &) const;
+    virtual GenesisState get_genesis_state() const override;
 };
 
 MONAD_NAMESPACE_END

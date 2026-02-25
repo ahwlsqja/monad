@@ -1,4 +1,4 @@
-// Copyright (C) 2025 Category Labs, Inc.
+// Copyright (C) 2025-26 Category Labs, Inc.
 //
 // This program is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -15,34 +15,21 @@
 
 #pragma once
 
+#include <category/core/bytes.hpp>
 #include <category/core/config.hpp>
-#include <category/execution/ethereum/db/file_db.hpp>
-
-#include <cstdint>
-#include <filesystem>
-#include <vector>
+#include <category/core/result.hpp>
+#include <category/execution/ethereum/chain/chain.hpp>
+#include <category/vm/evm/traits.hpp>
 
 MONAD_NAMESPACE_BEGIN
 
-struct Block;
+class BlockHashBuffer;
+class State;
+struct BlockHeader;
 
-class BlockDb
-{
-    FileDb db_;
-    std::vector<Block> rlp_blocks_;
-
-    void import_rlp(std::filesystem::path const &rlp_path);
-
-public:
-    BlockDb() = delete;
-    BlockDb(Block const &) = delete;
-    BlockDb(BlockDb &&) = default;
-    explicit BlockDb(
-        std::filesystem::path const &dir,
-        std::filesystem::path const &rlp_path = {});
-    ~BlockDb() = default;
-
-    bool get(uint64_t, Block &) const;
-};
+template <Traits traits>
+Result<bytes32_t> process_requests(
+    Chain const &, State &, BlockHashBuffer const &, BlockHeader const &,
+    ChainContext<traits> const &);
 
 MONAD_NAMESPACE_END
