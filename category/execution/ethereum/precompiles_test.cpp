@@ -14,8 +14,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <category/execution/ethereum/core/address.hpp>
-#include <category/execution/ethereum/precompiles.hpp>
 #include <category/execution/ethereum/db/page_storage_cache.hpp>
+#include <category/execution/ethereum/precompiles.hpp>
 #include <category/execution/ethereum/state2/block_state.hpp>
 #include <category/execution/ethereum/trace/call_tracer.hpp>
 #include <category/vm/evm/traits.hpp>
@@ -290,7 +290,7 @@ namespace
         mpt::Db db{machine};
         TrieDb tdb{db};
         vm::VM vm;
-        EthPageStorageCache cache{tdb};
+        NoopStorageCache cache{tdb};
         BlockState bs{tdb, cache, vm};
         State s{bs, Incarnation{0, 0}};
 

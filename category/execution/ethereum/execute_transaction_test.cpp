@@ -18,12 +18,12 @@
 #include <category/execution/ethereum/chain/ethereum_mainnet.hpp>
 #include <category/execution/ethereum/core/block.hpp>
 #include <category/execution/ethereum/core/transaction.hpp>
+#include <category/execution/ethereum/db/page_storage_cache.hpp>
 #include <category/execution/ethereum/db/trie_db.hpp>
 #include <category/execution/ethereum/evmc_host.hpp>
 #include <category/execution/ethereum/execute_transaction.hpp>
 #include <category/execution/ethereum/metrics/block_metrics.hpp>
 #include <category/execution/ethereum/state2/block_state.hpp>
-#include <category/execution/ethereum/db/page_storage_cache.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
 #include <category/execution/ethereum/trace/call_tracer.hpp>
 #include <category/execution/ethereum/trace/state_tracer.hpp>
@@ -74,7 +74,7 @@ TYPED_TEST(TraitsTest, irrevocable_gas_and_refund_new_contract)
     mpt::Db db{machine};
     db_t tdb{db};
     vm::VM vm;
-    EthPageStorageCache cache{tdb};
+    NoopStorageCache cache{tdb};
     BlockState bs{tdb, cache, vm};
     BlockMetrics metrics;
 
@@ -179,7 +179,7 @@ TYPED_TEST(TraitsTest, TopLevelCreate)
     mpt::Db db{machine};
     db_t tdb{db};
     vm::VM vm;
-    EthPageStorageCache cache{tdb};
+    NoopStorageCache cache{tdb};
     BlockState bs{tdb, cache, vm};
     BlockMetrics metrics;
 
@@ -330,7 +330,7 @@ TYPED_TEST(TraitsTest, refunds_delete)
     mpt::Db db{machine};
     db_t tdb{db};
     vm::VM vm;
-    EthPageStorageCache cache{tdb};
+    NoopStorageCache cache{tdb};
     BlockState bs{tdb, cache, vm};
     BlockMetrics metrics;
 
@@ -491,7 +491,7 @@ TYPED_TEST(TraitsTest, refunds_delete_then_set)
     mpt::Db db{machine};
     db_t tdb{db};
     vm::VM vm;
-    EthPageStorageCache cache{tdb};
+    NoopStorageCache cache{tdb};
     BlockState bs{tdb, cache, vm};
     BlockMetrics metrics;
 
