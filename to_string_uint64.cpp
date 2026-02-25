@@ -236,18 +236,37 @@ inline constexpr void write_base10_jeaiii(uint64_t x, std::string &buffer)
 }
 
 // ============================================================================
-// SSE, probably wrong
+// SSE: convert 16 decimal digits to ASCII in a single 128-bit register
 // ============================================================================
 
-// magick numbers for 16-bit division
-#define DIV_10 0x199a // shift = 0 + 16
-#define DIV_100 0x147b // shift = 3 + 16
+// Takes two 8-digit uint32 values packed into 64-bit lanes: [0|lo|0|hi]
+// Returns 16 ASCII digit bytes: hi digits (MSB first) in bytes 0-7,
+//                                lo digits (MSB first) in bytes 8-15.
+[[gnu::always_inline]]
+static inline __m128i digits16_to_ascii(uint32_t hi, uint32_t lo)
+{
+    __m128i v = _mm_set_epi64x(lo, hi);
 
-// magic number for 32-bit division
-#define DIV_10000 0xd1b71759 // shift = 13 + 32
+    // 2 x 8 digits -> 4 x 4 digits
+    __m128i q = _mm_srli_epi64(_mm_mul_epu32(v, _mm_set1_epi32(0xd1b71759)), 45);
+    __m128i r = _mm_sub_epi32(v, _mm_mul_epu32(q, _mm_set1_epi32(10000)));
+    v = _mm_or_si128(q, _mm_slli_epi64(r, 32));
+
+    // 4 x 4 digits -> 8 x 2 digits
+    q = _mm_srli_epi16(_mm_mulhi_epu16(v, _mm_set1_epi16(0x147b)), 3);
+    r = _mm_sub_epi16(v, _mm_mullo_epi16(q, _mm_set1_epi16(100)));
+    v = _mm_or_si128(q, _mm_slli_epi32(r, 16));
+
+    // 8 x 2 digits -> 16 x 1 digit
+    q = _mm_mulhi_epu16(v, _mm_set1_epi16(0x199a));
+    r = _mm_sub_epi16(v, _mm_mullo_epi16(q, _mm_set1_epi16(10)));
+    v = _mm_or_si128(q, _mm_slli_epi16(r, 8));
+
+    return _mm_add_epi8(v, _mm_set1_epi8('0'));
+}
 
 template <bool print_leading_zeros>
-inline constexpr void write_base10_sse(uint64_t v, std::string &buffer)
+inline void write_base10_sse(uint64_t v, std::string &buffer)
 {
     size_t digits_base10;
     if constexpr (print_leading_zeros) {
@@ -258,120 +277,39 @@ inline constexpr void write_base10_sse(uint64_t v, std::string &buffer)
     }
     size_t I = buffer.length();
     buffer.resize(I + digits_base10);
-    // Extract top 3 digits (at most), print separately
+
+    // Split into head (up to 3 digits, scalar) + tail (16 digits, SSE)
     uint64_t head = v / 10'000'000'000'000'000ULL;
-    v = v % 10'000'000'000'000'000ULL;
-
-    // v is 16-digit number = abcdefghijklmnop
-    __m128i const div_10000 = _mm_set1_epi32(DIV_10000);
-    __m128i const mul_10000 = _mm_set1_epi32(10000);
-    int const div_10000_shift = 45;
-
-    __m128i const div_100 = _mm_set1_epi16(DIV_100);
-    __m128i const mul_100 = _mm_set1_epi16(100);
-    int const div_100_shift = 3;
-
-    __m128i const div_10 = _mm_set1_epi16(DIV_10);
-    __m128i const mul_10 = _mm_set1_epi16(10);
-
-    __m128i const ascii0 = _mm_set1_epi8('0');
-
-    // can't be easily done in SSE
-    uint32_t const a =
-        static_cast<uint32_t>(v / 100'000'000); // 8-digit number: abcdefgh
-    uint32_t const b =
-        static_cast<uint32_t>(v % 100'000'000); // 8-digit number: ijklmnop
-
-    //     [ 3 | 2 | 1 | 0 | 3 | 2 | 1 | 0 | 3 | 2 | 1 | 0 | 3 | 2 | 1 | 0 ]
-    // x = [       0       |      ijklmnop |       0       |      abcdefgh ]
-    __m128i x = _mm_set_epi64x(b, a);
-
-    // x div 10^4   = [ 0 | ijkl | 0 | abcd ]
-    __m128i x_div_10000;
-    x_div_10000 = _mm_mul_epu32(x, div_10000);
-    x_div_10000 = _mm_srli_epi64(x_div_10000, div_10000_shift);
-
-    // x mod 10^4   = [       0       |          mnop |       0       | efgh ]
-    __m128i x_mod_10000;
-    x_mod_10000 = _mm_mul_epu32(x_div_10000, mul_10000);
-    x_mod_10000 = _mm_sub_epi32(x, x_mod_10000);
-
-    // y            = [          mnop |          ijkl |          efgh | abcd ]
-    __m128i y = _mm_or_si128(x_div_10000, _mm_slli_epi64(x_mod_10000, 32));
-
-    // y_div_100    = [   0   |    mn |   0   |    ij |   0   |    ef |   0   |
-    // ab ]
-    __m128i y_div_100;
-    y_div_100 = _mm_mulhi_epu16(y, div_100);
-    y_div_100 = _mm_srli_epi16(y_div_100, div_100_shift);
-
-    // y_mod_100    = [   0   |    op |   0   |    kl |   0   |    gh |   0   |
-    // cd ]
-    __m128i y_mod_100;
-    y_mod_100 = _mm_mullo_epi16(y_div_100, mul_100);
-    y_mod_100 = _mm_sub_epi16(y, y_mod_100);
-
-    // z            = [    mn |    op |    ij |    kl |    ef |    gh |    ab |
-    // cd ]
-    __m128i z = _mm_or_si128(y_div_100, _mm_slli_epi32(y_mod_100, 16));
-
-    // z_div_10     = [ 0 | m | 0 | o | 0 | i | 0 | k | 0 | e | 0 | g | 0 | a |
-    // 0 | c ]
-    __m128i z_div_10 = _mm_mulhi_epu16(z, div_10);
-
-    // z_mod_10     = [ 0 | n | 0 | p | 0 | j | 0 | l | 0 | f | 0 | h | 0 | b |
-    // 0 | d ]
-    __m128i z_mod_10;
-    z_mod_10 = _mm_mullo_epi16(z_div_10, mul_10);
-    z_mod_10 = _mm_sub_epi16(z, z_mod_10);
-
-    // interleave z_mod_10 and z_div_10 -
-    // tmp          = [ m | n | o | p | i | j | k | l | e | f | g | h | a | b |
-    // c | d ]
-    __m128i tmp = _mm_or_si128(z_div_10, _mm_slli_epi16(z_mod_10, 8));
-
-    // convert to ascii
-    tmp = _mm_add_epi8(tmp, ascii0);
+    uint64_t tail = v % 10'000'000'000'000'000ULL;
+    auto tail_hi = uint32_t(tail / 100'000'000);
+    auto tail_lo = uint32_t(v % 100'000'000);
+    __m128i ascii16 = digits16_to_ascii(tail_hi, tail_lo);
 
     if constexpr (print_leading_zeros) {
-        // Print head (unconditionally)
-        uint64_t h2 = head / 100;
-        uint64_t h10 = head % 100;
-        buffer[I] = digits_0_9[h2];
-        std::memcpy(&buffer[I + 1], &digits_0_99[h10 * 2], 2);
-
-        // Dump tail 16 digits into output buffer
-        _mm_storeu_si128((__m128i *)&buffer[I + 3], tmp);
+        buffer[I] = digits_0_9[head / 100];
+        std::memcpy(&buffer[I + 1], &digits_0_99[(head % 100) * 2], 2);
+        _mm_storeu_si128(reinterpret_cast<__m128i *>(&buffer[I + 3]), ascii16);
     }
-    else {
-        if (head) {
-            // Print head (partially) and tail 16 digits (unconditionally)
-            if (head >= 10) {
-                if (head >= 100) {
-                    buffer[I] = digits_0_9[head / 100];
-                    std::memcpy(
-                        &buffer[I + 1], &digits_0_99[(head % 100) * 2], 2);
-                    I += 3;
-                }
-                else {
-                    std::memcpy(&buffer[I], &digits_0_99[head * 2], 2);
-                    I += 2;
-                }
-            }
-            else {
-                buffer[I] = digits_0_9[head];
-                I += 1;
-            }
-
-            // Dump tail 16 digits into output buffer
-            _mm_storeu_si128((__m128i *)&buffer[I], tmp);
+    else if (head) {
+        if (head >= 100) {
+            buffer[I] = digits_0_9[head / 100];
+            std::memcpy(&buffer[I + 1], &digits_0_99[(head % 100) * 2], 2);
+            I += 3;
+        }
+        else if (head >= 10) {
+            std::memcpy(&buffer[I], &digits_0_99[head * 2], 2);
+            I += 2;
         }
         else {
-            char scratch[16];
-            _mm_storeu_si128((__m128i *)&scratch[0], tmp);
-            std::memcpy(
-                &buffer[I], &scratch[16 - digits_base10], digits_base10);
+            buffer[I] = digits_0_9[head];
+            I += 1;
         }
+        _mm_storeu_si128(reinterpret_cast<__m128i *>(&buffer[I]), ascii16);
+    }
+    else {
+        alignas(16) char scratch[16];
+        _mm_store_si128(reinterpret_cast<__m128i *>(scratch), ascii16);
+        std::memcpy(&buffer[I], &scratch[16 - digits_base10], digits_base10);
     }
 }
 
@@ -428,8 +366,6 @@ inline constexpr void write_base10_alvarez(uint64_t x, std::string &buffer)
 
     uint64_t hi;
     uint64_t lo;
-    size_t index_hi;
-    size_t index_lo;
     size_t remaining_digits;
     if constexpr (print_leading_zeros) {
         // Process most significant upper 3 digits to get down to 16
@@ -505,6 +441,7 @@ inline constexpr void write_base10_alvarez(uint64_t x, std::string &buffer)
             lo = x % 100;
             break;
         default:
+            hi = 0;
             // Unreachable
             break;
         }
