@@ -228,7 +228,11 @@ TEST_F(StateSyncFixture, sync_from_latest)
         // commit some proposal to client db
         tdb.set_block_and_prefix(N);
         commit_simple(
-            tdb, {}, {}, bytes32_t{N + 1}, BlockHeader{.number = N + 1});
+            tdb,
+            StateDeltas{},
+            {},
+            bytes32_t{N + 1},
+            BlockHeader{.number = N + 1});
         init();
     }
     handle_target(
@@ -316,7 +320,8 @@ TEST_F(StateSyncFixture, sync_from_some)
         TrieDb tdb{db};
         load_genesis_state(GENESIS_STATE, tdb);
         // commit some proposal to client db
-        commit_simple(tdb, {}, {}, NULL_HASH_BLAKE3, BlockHeader{.number = 1});
+        commit_simple(
+            tdb, StateDeltas{}, {}, NULL_HASH_BLAKE3, BlockHeader{.number = 1});
         load_genesis_state(GENESIS_STATE, stdb);
         init();
     }
@@ -625,7 +630,8 @@ TEST_F(StateSyncFixture, sync_client_has_proposals)
         TrieDb tdb{db};
         tdb.reset_root(load_header({}, db, BlockHeader{.number = 0}), 0);
         for (uint64_t n = 1; n <= 249; ++n) {
-            commit_simple(tdb, {}, {}, bytes32_t{n}, BlockHeader{.number = n});
+            commit_simple(
+                tdb, StateDeltas{}, {}, bytes32_t{n}, BlockHeader{.number = n});
         }
     }
 

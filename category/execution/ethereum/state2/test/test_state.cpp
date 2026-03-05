@@ -587,7 +587,7 @@ TYPED_TEST(InMemoryStateTraitsTest, selfdestruct_merge_commit_incarnation)
         auto [released_state, released_code] = std::move(bs).release();
         commit_simple(
             this->tdb,
-            *released_state,
+            std::move(released_state),
             released_code,
             bytes32_t{1},
             BlockHeader{.number = 1},
@@ -642,7 +642,7 @@ TYPED_TEST(
         auto [released_state, released_code] = std::move(bs).release();
         commit_simple(
             this->tdb,
-            *released_state,
+            std::move(released_state),
             released_code,
             bytes32_t{1},
             BlockHeader{.number = 1},
@@ -702,7 +702,7 @@ TYPED_TEST(
         auto [released_state, released_code] = std::move(bs).release();
         commit_simple(
             this->tdb,
-            *released_state,
+            std::move(released_state),
             released_code,
             NULL_HASH_BLAKE3,
             BlockHeader{.number = 0},
@@ -1274,7 +1274,7 @@ TEST_F(InMemoryStateTest, commit_storage_and_account_together_regression)
     auto [released_state, released_code] = std::move(bs).release();
     commit_simple(
         this->tdb,
-        *released_state,
+        std::move(released_state),
         released_code,
         NULL_HASH_BLAKE3,
         BlockHeader{.number = 0},
@@ -1305,7 +1305,7 @@ TEST_F(InMemoryStateTest, set_and_then_clear_storage_in_same_commit)
     auto [released_state, released_code] = std::move(bs).release();
     commit_simple(
         this->tdb,
-        *released_state,
+        std::move(released_state),
         released_code,
         NULL_HASH_BLAKE3,
         {},
@@ -1365,7 +1365,7 @@ TYPED_TEST(InMemoryStateTraitsTest, commit_twice)
         auto [released_state, released_code] = std::move(bs).release();
         commit_simple(
             this->tdb,
-            *released_state,
+            std::move(released_state),
             released_code,
             bytes32_t{10},
             BlockHeader{.number = 10});
@@ -1392,7 +1392,7 @@ TYPED_TEST(InMemoryStateTraitsTest, commit_twice)
         auto [released_state, released_code] = std::move(bs).release();
         commit_simple(
             this->tdb,
-            *released_state,
+            std::move(released_state),
             released_code,
             bytes32_t{11},
             BlockHeader{.number = 11});
@@ -1474,7 +1474,7 @@ TEST_F(OnDiskStateTest, commit_multiple_proposals)
         auto [released_state, released_code] = std::move(bs).release();
         commit_simple(
             this->tdb,
-            *released_state,
+            std::move(released_state),
             released_code,
             bytes32_t{118},
             BlockHeader{.number = 11});
@@ -1502,7 +1502,7 @@ TEST_F(OnDiskStateTest, commit_multiple_proposals)
         auto [released_state, released_code] = std::move(bs).release();
         commit_simple(
             this->tdb,
-            *released_state,
+            std::move(released_state),
             released_code,
             bytes32_t{116},
             BlockHeader{.number = 11});
@@ -1532,7 +1532,7 @@ TEST_F(OnDiskStateTest, commit_multiple_proposals)
         auto [released_state, released_code] = std::move(bs).release();
         commit_simple(
             this->tdb,
-            *released_state,
+            std::move(released_state),
             released_code,
             bytes32_t{117},
             BlockHeader{.number = 11});
@@ -1578,12 +1578,10 @@ TEST_F(OnDiskStateTest, proposal_basics)
     auto [released_state1, released_code1] = std::move(bs1).release();
     commit_simple(
         db_cache,
-        *released_state1,
+        std::move(released_state1),
         released_code1,
         bytes32_t{11},
         BlockHeader{.number = 11});
-    db_cache.update_proposal_state(
-        std::move(released_state1), 11, bytes32_t{11});
     db_cache.finalize(11, bytes32_t{11});
 
     db_cache.set_block_and_prefix(11, bytes32_t{11});
@@ -1597,12 +1595,10 @@ TEST_F(OnDiskStateTest, proposal_basics)
     auto [released_state2, released_code2] = std::move(bs2).release();
     commit_simple(
         db_cache,
-        *released_state2,
+        std::move(released_state2),
         released_code2,
         bytes32_t{12},
         BlockHeader{.number = 12});
-    db_cache.update_proposal_state(
-        std::move(released_state2), 12, bytes32_t{12});
     EXPECT_EQ(db_cache.read_account(a).value().balance, 40'000);
     db_cache.finalize(12, bytes32_t{12});
     EXPECT_EQ(db_cache.read_account(a).value().balance, 40'000);
@@ -1642,11 +1638,10 @@ TEST_F(OnDiskStateTest, undecided_proposals)
     db_cache.set_block_and_prefix(9);
     commit_simple(
         db_cache,
-        *state_deltas,
+        std::move(state_deltas),
         Code{},
         bytes32_t{10},
         BlockHeader{.number = 10});
-    db_cache.update_proposal_state(std::move(state_deltas), 10, bytes32_t{10});
     db_cache.finalize(10, bytes32_t{10});
     EXPECT_TRUE(db_cache.read_account(a).has_value());
     EXPECT_TRUE(db_cache.read_account(b).has_value());
@@ -1674,12 +1669,10 @@ TEST_F(OnDiskStateTest, undecided_proposals)
     auto [released_state_111, released_code_111] = std::move(bs_111).release();
     commit_simple(
         db_cache,
-        *released_state_111,
+        std::move(released_state_111),
         released_code_111,
         bytes32_t{111},
         BlockHeader{.number = 11});
-    db_cache.update_proposal_state(
-        std::move(released_state_111), 11, bytes32_t{111});
     auto const state_root_round_111 = db_cache.state_root();
     db_cache.set_block_and_prefix(11, bytes32_t{111});
     EXPECT_TRUE(db_cache.read_account(a).has_value());
@@ -1707,12 +1700,10 @@ TEST_F(OnDiskStateTest, undecided_proposals)
     auto [released_state_121, released_code_121] = std::move(bs_121).release();
     commit_simple(
         db_cache,
-        *released_state_121,
+        std::move(released_state_121),
         released_code_121,
         bytes32_t{121},
         BlockHeader{.number = 12});
-    db_cache.update_proposal_state(
-        std::move(released_state_121), 12, bytes32_t{121});
     db_cache.set_block_and_prefix(12, bytes32_t{121});
     EXPECT_TRUE(db_cache.read_account(a).has_value());
     EXPECT_TRUE(db_cache.read_account(b).has_value());
@@ -1740,12 +1731,10 @@ TEST_F(OnDiskStateTest, undecided_proposals)
     auto [released_state_112, released_code_112] = std::move(bs_112).release();
     commit_simple(
         db_cache,
-        *released_state_112,
+        std::move(released_state_112),
         released_code_112,
         bytes32_t{112},
         BlockHeader{.number = 11});
-    db_cache.update_proposal_state(
-        std::move(released_state_112), 11, bytes32_t{112});
 
     LOG_INFO("block 12 round 122 on block 11 round 112");
     db_cache.set_block_and_prefix(11, bytes32_t{112});
@@ -1761,12 +1750,10 @@ TEST_F(OnDiskStateTest, undecided_proposals)
     auto [released_state_122, released_code_122] = std::move(bs_122).release();
     commit_simple(
         db_cache,
-        *released_state_122,
+        std::move(released_state_122),
         released_code_122,
         bytes32_t{122},
         BlockHeader{.number = 12});
-    db_cache.update_proposal_state(
-        std::move(released_state_122), 12, bytes32_t{122});
 
     LOG_INFO("block 13 round 131 on block 12 round 121");
     db_cache.set_block_and_prefix(12, bytes32_t{121});
@@ -1785,12 +1772,10 @@ TEST_F(OnDiskStateTest, undecided_proposals)
     auto [released_state_131, released_code_131] = std::move(bs_131).release();
     commit_simple(
         db_cache,
-        *released_state_131,
+        std::move(released_state_131),
         released_code_131,
         bytes32_t{131},
         BlockHeader{.number = 13});
-    db_cache.update_proposal_state(
-        std::move(released_state_131), 13, bytes32_t{131});
     auto const state_root_round_131 = db_cache.state_root();
 
     LOG_INFO("block 13 round 132 on block 12 round 122");
@@ -1807,12 +1792,10 @@ TEST_F(OnDiskStateTest, undecided_proposals)
     auto [released_state_132, released_code_132] = std::move(bs_132).release();
     commit_simple(
         db_cache,
-        *released_state_132,
+        std::move(released_state_132),
         released_code_132,
         bytes32_t{132},
         BlockHeader{.number = 13});
-    db_cache.update_proposal_state(
-        std::move(released_state_132), 13, bytes32_t{132});
 
     //  b10 r100        a 10   b 20 v1 v2   c 30 v1 v2
     //  b11 r111 r100           +40 v2 --
@@ -1860,7 +1843,7 @@ namespace
 
         std::mt19937_64 rng_;
         Db &db1_;
-        DbCache &db2_;
+        Db &db2_;
         vm::VM &vm_;
         uint64_t finalized_block_{0};
         uint64_t finalized_proposal_seed_{0};
@@ -1882,7 +1865,7 @@ namespace
 
     public:
         RandomProposalGenerator(
-            uint64_t const seed, Db &db1, DbCache &db2, vm::VM &vm)
+            uint64_t const seed, Db &db1, Db &db2, vm::VM &vm)
             : rng_(seed)
             , db1_(db1)
             , db2_(db2)
@@ -2098,7 +2081,7 @@ namespace
                 auto [state1, code1] = std::move(bs1).release();
                 commit_simple(
                     db1_,
-                    *state1,
+                    std::move(state1),
                     code1,
                     get_dummy_block_id(proposal_seed),
                     BlockHeader{.number = block});
@@ -2107,14 +2090,10 @@ namespace
                 auto [state2, code2] = std::move(bs2).release();
                 commit_simple(
                     db2_,
-                    *state2,
+                    std::move(state2),
                     code2,
                     get_dummy_block_id(proposal_seed),
                     BlockHeader{.number = block});
-                db2_.update_proposal_state(
-                    std::move(state2),
-                    block,
-                    get_dummy_block_id(proposal_seed));
             }
         }
 

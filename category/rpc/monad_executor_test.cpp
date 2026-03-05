@@ -415,7 +415,7 @@ TEST_F(EthCallFixture, on_proposed_block)
         .gas_limit = 100000u, .to = to, .type = TransactionType::eip1559};
     BlockHeader const header{.number = 256};
 
-    commit_simple(tdb, {}, {}, bytes32_t{256}, header);
+    commit_simple(tdb, StateDeltas{}, {}, bytes32_t{256}, header);
     tdb.set_block_and_prefix(header.number, bytes32_t{256});
 
     auto const rlp_tx = to_vec(rlp::encode_transaction(tx));
@@ -493,7 +493,7 @@ TEST_F(EthCallFixture, blockhash_before_fork)
         .data = byte_string{bytecode.data(), bytecode.size()}};
     BlockHeader const header{.number = 256};
 
-    commit_simple(tdb, {}, {}, bytes32_t{256}, header);
+    commit_simple(tdb, StateDeltas{}, {}, bytes32_t{256}, header);
     tdb.set_block_and_prefix(header.number, bytes32_t{256});
 
     auto const rlp_tx = to_vec(rlp::encode_transaction(tx));

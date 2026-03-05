@@ -241,7 +241,7 @@ TYPED_TEST(TraitsTest, call_frames_stress_test)
     auto [state, code] = std::move(bs).release();
     commit_simple(
         tdb,
-        *state,
+        std::move(state),
         code,
         block_id,
         header,
@@ -522,7 +522,7 @@ TYPED_TEST(TraitsTest, call_frames_refund)
     auto [state, code] = std::move(bs).release();
     commit_simple(
         tdb,
-        *state,
+        std::move(state),
         code,
         block_id,
         header,

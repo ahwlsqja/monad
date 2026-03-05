@@ -161,6 +161,7 @@ void TrieDb::commit(
     BlockHeader const &header, StateDeltas const &,
     std::function<void(BlockHeader &)> populate_header_fn)
 {
+    MONAD_ASSERT(populate_header_fn);
     auto const block_number = header.number;
     MONAD_ASSERT(block_number <= std::numeric_limits<int64_t>::max());
 

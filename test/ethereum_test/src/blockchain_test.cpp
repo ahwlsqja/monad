@@ -534,7 +534,7 @@ void process_test(
         auto [released_state, released_code] = std::move(bs).release();
         commit_simple(
             tdb,
-            *released_state,
+            std::move(released_state),
             released_code,
             NULL_HASH_BLAKE3,
             header,

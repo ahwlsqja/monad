@@ -110,8 +110,8 @@ inline bytes32_t commit_sequential(
     bytes32_t const block_id =
         eth_header.number ? bytes32_t{eth_header.number} : NULL_HASH_BLAKE3;
 
-    commit_simple(db, deltas, code, block_id, eth_header,
-        receipts, call_frames, senders, txns, ommers, withdrawals);
+    commit_simple(db, deltas, code, block_id, eth_header, receipts, call_frames,
+        senders, txns, ommers, withdrawals);
 
     db.finalize(eth_header.number, block_id);
     db.set_block_and_prefix(eth_header.number); // set to finalized
