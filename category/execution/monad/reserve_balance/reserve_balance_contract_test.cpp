@@ -51,7 +51,6 @@
 
 #include <ankerl/unordered_dense.h>
 #include <evmc/evmc.hpp>
-#include <intx/intx.hpp>
 
 #include <gtest/gtest.h>
 

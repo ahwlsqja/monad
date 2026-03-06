@@ -18,6 +18,7 @@
 #include <category/core/assert.h>
 #include <category/core/byte_string.hpp>
 #include <category/core/bytes.hpp>
+#include <category/core/int.hpp>
 #include <category/core/likely.h>
 #include <category/core/result.hpp>
 #include <category/core/rlp/config.hpp>

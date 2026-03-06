@@ -1343,8 +1343,8 @@ TEST_F(EthCallFixture, call_trace_with_logs)
                         {.data = {},
                          .topics =
                              {
-                                 intx::be::store<bytes32_t, uint256_t>(2),
-                                 intx::be::store<bytes32_t, uint256_t>(1),
+                                 monad::be_store<bytes32_t>(uint256_t{2}),
+                                 monad::be_store<bytes32_t>(uint256_t{1}),
                              },
                          .address = a_address},
                     .position = 0,
@@ -1354,7 +1354,7 @@ TEST_F(EthCallFixture, call_trace_with_logs)
                         {.data = {},
                          .topics =
                              {
-                                 intx::be::store<bytes32_t, uint256_t>(3),
+                                 monad::be_store<bytes32_t>(uint256_t{3}),
                              },
                          .address = a_address},
                     .position = 2,
@@ -1410,9 +1410,9 @@ TEST_F(EthCallFixture, call_trace_with_logs)
         .depth = 1,
         .logs = std::vector{CallFrame::Log{
             .log =
-                {.data = byte_string{intx::be::store<bytes32_t>(
+                {.data = byte_string{monad::be_store<bytes32_t>(
                      std::numeric_limits<uint256_t>::max() - 1)},
-                 .topics = {intx::be::store<bytes32_t, uint256_t>(1)},
+                 .topics = {monad::be_store<bytes32_t>(uint256_t{1})},
                  .address = c_address},
             .position = 0,
         }},
