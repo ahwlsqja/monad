@@ -282,6 +282,9 @@ Node::SharedPtr copy_trie_to_dest(
     Node::SharedPtr dest_root, NibblesView const dest_prefix,
     uint64_t const dest_version, bool const write_root)
 {
+    auto const expected_compact_offset =
+        dest_root ? compact_offset_pair::deserialize(dest_root->value())
+                  : compact_offset_pair::deserialize(src_root->value());
     dest_root = copy_trie_impl(
         aux,
         std::move(src_root),
@@ -294,7 +297,10 @@ Node::SharedPtr copy_trie_to_dest(
         MONAD_ASSERT(aux.db_history_max_version() >= dest_version);
     }
     if (aux.is_on_disk()) {
-        MONAD_ASSERT(dest_root->value_len == sizeof(uint32_t) * 2);
+        // invariant: copy_trie must preserve compaction offsets
+        MONAD_ASSERT(
+            compact_offset_pair::deserialize(dest_root->value()) ==
+            expected_compact_offset);
     }
     return dest_root;
 }
