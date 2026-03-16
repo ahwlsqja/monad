@@ -1117,7 +1117,7 @@ Node::SharedPtr UpdateAuxImpl::do_update(
         }
         if (!version_is_valid_ondisk(version)) {
             // only advance compaction progress for non existent version
-            advance_compact_offsets();
+            advance_compact_offsets(prev_root);
         }
     }
 
@@ -1367,7 +1367,7 @@ void UpdateAuxImpl::update_compaction_state()
     }
 }
 
-void UpdateAuxImpl::advance_compact_offsets()
+void UpdateAuxImpl::advance_compact_offsets(Node::SharedPtr const prev_root)
 {
     /* Note on ring based compaction:
     Fast list compaction is steady pace based on disk growth over recent blocks,
@@ -1403,6 +1403,16 @@ void UpdateAuxImpl::advance_compact_offsets()
     // Only advance fast compaction when the fast list contains at least this
     // many versions' worth of average disk growth (prevents over-compaction)
     constexpr uint32_t min_versions_of_growth_before_compact_fast_list = 5000;
+
+    if (prev_root) {
+        auto const min_offsets = calc_min_offsets(*prev_root);
+        if (min_offsets.fast != INVALID_COMPACT_VIRTUAL_OFFSET) {
+            compact_offsets.fast = min_offsets.fast;
+        }
+        if (min_offsets.slow != INVALID_COMPACT_VIRTUAL_OFFSET) {
+            compact_offsets.slow = min_offsets.slow;
+        }
+    }
 
     auto const fast_disk_usage =
         num_chunks(chunk_list::fast) / (double)io->chunk_count();
