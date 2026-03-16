@@ -15,6 +15,8 @@
 
 #include <category/core/byte_string.hpp>
 #include <category/core/bytes.hpp>
+#include <category/core/fiber/fiber_group.hpp>
+#include <category/core/fiber/fiber_thread_pool.hpp>
 #include <category/core/result.hpp>
 #include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/db/trie_db.hpp>
@@ -22,10 +24,12 @@
 #include <category/execution/ethereum/metrics/block_metrics.hpp>
 #include <category/execution/ethereum/state2/block_state.hpp>
 #include <category/execution/ethereum/trace/state_tracer.hpp>
+#include <category/execution/ethereum/validate_transaction.hpp>
 #include <category/execution/monad/chain/monad_devnet.hpp>
 #include <category/execution/monad/execute_system_transaction.hpp>
 #include <category/execution/monad/staking/util/constants.hpp>
 #include <category/execution/monad/system_sender.hpp>
+#include <category/execution/monad/validate_system_transaction.hpp>
 #include <category/mpt/db.hpp>
 #include <category/vm/evm/traits.hpp>
 #include <category/vm/vm.hpp>
@@ -36,7 +40,9 @@
 #include <boost/outcome/success_failure.hpp>
 #include <boost/outcome/try.hpp>
 
+#include <chrono>
 #include <cstdint>
+#include <future>
 
 #include <gtest/gtest.h>
 
@@ -281,4 +287,129 @@ TEST(SystemTransaction, statediff_trace_staking_epoch_change)
 
         EXPECT_EQ(trace, nlohmann::json::parse(expected));
     }
+}
+
+TEST(SystemTransaction, static_validate_system_transaction_failure)
+{
+    InMemoryMachine machine;
+    mpt::Db db{machine};
+    TrieDb tdb{db};
+    vm::VM vm;
+
+    MonadDevnet chain;
+
+    BlockState block_state{tdb, vm};
+    BlockMetrics block_metrics;
+
+    BlockHeader const header{};
+
+    NoopCallTracer noop_call_tracer;
+    trace::StateTracer noop_state_tracer = std::monostate{};
+
+    auto const tx = Transaction{.type = TransactionType::eip7702};
+
+    boost::fibers::promise<void> promise;
+    fiber::FiberThreadPool thread_pool(1, true);
+    auto group = thread_pool.create_fiber_group(1);
+
+    auto started_promise = std::make_shared<std::promise<void>>();
+    auto started = started_promise->get_future();
+    auto result_promise = std::make_shared<std::promise<Result<Receipt>>>();
+    auto result_future = result_promise->get_future();
+
+    group->submit(1, [&, started_promise, result_promise] {
+        started_promise->set_value();
+        result_promise->set_value(
+            ExecuteSystemTransaction<MonadTraits<MONAD_NEXT>>{
+                chain,
+                0,
+                tx,
+                SYSTEM_SENDER,
+                header,
+                block_state,
+                block_metrics,
+                promise,
+                noop_call_tracer,
+                noop_state_tracer}());
+    });
+
+    ASSERT_EQ(
+        started.wait_for(std::chrono::seconds{1}), std::future_status::ready);
+    EXPECT_EQ(
+        result_future.wait_for(std::chrono::milliseconds{50}),
+        std::future_status::timeout);
+
+    promise.set_value();
+
+    ASSERT_EQ(
+        result_future.wait_for(std::chrono::seconds{1}),
+        std::future_status::ready);
+    Result<Receipt> const result = result_future.get();
+    group.reset();
+
+    EXPECT_TRUE(result.has_error());
+    EXPECT_EQ(result.error(), SystemTransactionError::TypeNotLegacy);
+}
+
+TEST(SystemTransaction, static_validate_transaction_failure)
+{
+    InMemoryMachine machine;
+    mpt::Db db{machine};
+    TrieDb tdb{db};
+    vm::VM vm;
+
+    MonadDevnet chain;
+
+    BlockState block_state{tdb, vm};
+    BlockMetrics block_metrics;
+
+    BlockHeader const header{.number = 0};
+
+    NoopCallTracer noop_call_tracer;
+    trace::StateTracer noop_state_tracer = std::monostate{};
+
+    auto const tx = Transaction{
+        .sc = SignatureAndChain{.chain_id = 1}, .to = staking::STAKING_CA};
+
+    boost::fibers::promise<void> promise;
+    fiber::FiberThreadPool thread_pool(1, true);
+    auto group = thread_pool.create_fiber_group(1);
+
+    auto started_promise = std::make_shared<std::promise<void>>();
+    auto started = started_promise->get_future();
+    auto result_promise = std::make_shared<std::promise<Result<Receipt>>>();
+    auto result_future = result_promise->get_future();
+
+    group->submit(1, [&, started_promise, result_promise] {
+        started_promise->set_value();
+        result_promise->set_value(
+            ExecuteSystemTransaction<MonadTraits<MONAD_NEXT>>{
+                chain,
+                0,
+                tx,
+                SYSTEM_SENDER,
+                header,
+                block_state,
+                block_metrics,
+                promise,
+                noop_call_tracer,
+                noop_state_tracer}());
+    });
+
+    ASSERT_EQ(
+        started.wait_for(std::chrono::seconds{1}), std::future_status::ready);
+    EXPECT_EQ(
+        result_future.wait_for(std::chrono::milliseconds{50}),
+        std::future_status::timeout);
+
+    promise.set_value();
+
+    ASSERT_EQ(
+        result_future.wait_for(std::chrono::seconds{1}),
+        std::future_status::ready);
+    Result<Receipt> const result = result_future.get();
+    group.reset();
+
+    EXPECT_TRUE(result.has_error());
+    EXPECT_EQ(result.error(), TransactionError::WrongChainId);
 }
