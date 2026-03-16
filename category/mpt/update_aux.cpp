@@ -1383,15 +1383,9 @@ void UpdateAuxImpl::advance_compact_offsets()
     The fast list compaction targets an uncompacted range of avg_disk_growth *
     history_length.
 
-    On busy blocks (last block growth >= average) we just compact at the average
-    rate, so we don't pile compaction I/O on top of heavy workload and feed the
-    recirculation loop (more compaction -> more fast writes -> higher average ->
-    more compaction).
-
-    On quiet blocks we apply a proportional correction weighted by spare
-    capacity (2 * avg / last_block_growth) to catch up. The correction is capped
-    at avg_disk_growth so a single quiet block never compacts more than 2x the
-    average.
+    We apply a proportional correction weighted by spare capacity (2 * avg /
+    last_block_growth) to catch up. The correction is capped at avg_disk_growth
+    so a single quiet block never compacts more than 2x the average.
 
     Slow ring compaction begins when overall disk usage reaches
     `usage_limit_start_compact_slow` and slow list disk usage reaches
@@ -1465,24 +1459,17 @@ void UpdateAuxImpl::advance_compact_offsets()
         // parents and the average can come down.
         uint32_t to_advance = 0;
         if (tracking_error > 0 && !skip_compaction) {
-            if (last_block_disk_growth_fast_ < avg_disk_growth_fast) {
-                // Quiet block: catch up with weighted proportional
-                // correction. Weight scales up with spare I/O capacity.
-                double const quiet_weight =
-                    2.0 * avg_disk_growth_fast / last_block_disk_growth_fast_;
-                uint32_t const correction = std::min(
-                    divide_and_round(
-                        quiet_weight * static_cast<double>(tracking_error),
-                        valid_history_length),
-                    avg_disk_growth_fast);
-                to_advance = std::min(
-                    avg_disk_growth_fast + correction,
-                    max_compact_offset_range);
-            }
-            else {
-                // Busy block: compact at average to keep up
-                to_advance = avg_disk_growth_fast;
-            }
+            // Catch up with weighted proportional
+            // correction. Weight scales up with spare I/O capacity.
+            double const K =
+                2.0 * avg_disk_growth_fast / last_block_disk_growth_fast_;
+            uint32_t const correction = std::min(
+                divide_and_round(
+                    K * static_cast<double>(tracking_error),
+                    valid_history_length),
+                avg_disk_growth_fast);
+            to_advance = std::min(
+                avg_disk_growth_fast + correction, max_compact_offset_range);
         }
         to_advance = std::min(to_advance, max_compact_offset_range);
         compact_offset_range_fast_.set_value(to_advance);
