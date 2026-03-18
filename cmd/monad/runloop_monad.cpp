@@ -330,7 +330,9 @@ Result<BlockExecOutput> propose_block(
         block_id, builder, block.header, std::move(state), [&](BlockHeader &h) {
             // second stage: populate block header
             h.receipts_root = db.receipts_root();
-            h.state_root = db.state_root();
+            h.state_root = traits::monad_rev() < MONAD_NEXT
+                               ? db.state_root()
+                               : db.page_state_root();
             h.withdrawals_root = db.withdrawals_root();
             h.transactions_root = db.transactions_root();
             h.gas_used = results.empty() ? 0 : results.back().gas_used;
