@@ -821,20 +821,8 @@ TEST(DbTest, history_length_adjustment_never_under_min)
     Db db{machine, config};
     Node::SharedPtr root{};
 
-    constexpr unsigned nkeys = 1000;
-
-    // prepare updates with 8KB size value
-    std::deque<monad::byte_string> bytes_alloc;
-    std::deque<Update> updates_alloc;
-    auto const &large_value =
-        bytes_alloc.emplace_back(monad::byte_string(8 * 1024, 0xf));
-    for (size_t i = 0; i < nkeys; ++i) {
-        updates_alloc.push_back(Update{
-            .key = bytes_alloc.emplace_back(keccak_int_to_string(i)),
-            .value = large_value,
-            .incarnation = false,
-            .next = UpdateList{}});
-    }
+    constexpr unsigned nkeys = 100;
+    monad::byte_string const large_value(16 * 1024, 0xf);
 
     // construct a read-only aux
     monad::async::storage_pool::creation_flags pool_options;
@@ -850,9 +838,18 @@ TEST(DbTest, history_length_adjustment_never_under_min)
     UpdateAux aux_reader{io_ctx};
 
     auto batch_upsert_once = [&](uint64_t const version) {
+        // upsert new keys with large value to trigger compaction and history
+        // length adjustment
         UpdateList ls;
-        for (auto &u : updates_alloc) {
-            ls.push_front(u);
+        std::deque<monad::byte_string> bytes_alloc;
+        std::deque<Update> updates_alloc;
+        for (size_t i = 0; i < nkeys; ++i) {
+            ls.push_front(updates_alloc.emplace_back(Update{
+                .key = bytes_alloc.emplace_back(
+                    keccak_int_to_string(version * nkeys + i)),
+                .value = large_value,
+                .incarnation = false,
+                .next = UpdateList{}}));
         }
         root = db.upsert(std::move(root), std::move(ls), version);
     };
