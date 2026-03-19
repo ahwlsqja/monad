@@ -337,6 +337,8 @@ void run_initcode_dipped_into_reserve_test(
         state.add_to_balance(new_contract, INITIAL_BALANCE);
         state.create_contract(FACTORY);
         state.set_code(FACTORY, byte_string_view{factory_code});
+        MONAD_ASSERT(state.get_balance(TX_SENDER) == INITIAL_BALANCE);
+        MONAD_ASSERT(state.get_balance(new_contract) == INITIAL_BALANCE);
         MONAD_ASSERT(bs.can_merge(state));
         bs.merge(state);
     }

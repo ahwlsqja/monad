@@ -30,6 +30,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <vector>
 
 MONAD_NAMESPACE_BEGIN
 
