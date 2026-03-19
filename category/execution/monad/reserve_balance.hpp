@@ -47,15 +47,22 @@ class ReserveBalance
     State *state_;
     bool tracking_enabled_{false};
     bool use_recent_code_hash_{false};
-    bool allow_init_selfdestruct_exemption_{false};
+    bool allow_nonsender_empty_{false};
+    FailedSet const *grandparent_senders_and_authorities_{nullptr};
+    FailedSet const *parent_senders_and_authorities_{nullptr};
+    FailedSet const *senders_and_authorities_{nullptr};
+    std::vector<Address> const *senders_{nullptr};
+    std::vector<std::vector<std::optional<Address>>> const *authorities_{
+        nullptr};
+    uint64_t tx_index_{0};
     Address sender_{};
     uint256_t sender_gas_fees_{0};
-    bool sender_can_dip_{false};
     FailedSet failed_{};
     ViolationThresholdMap violation_thresholds_{};
     std::function<uint256_t(Address const &)> get_max_reserve_{};
 
     bool subject_account(Address const &);
+    bool can_account_empty_reserve(Address const &, bool) const;
     uint256_t pretx_reserve(Address const &);
     void update_violation_status(Address const &);
 
@@ -81,6 +88,12 @@ public:
         std::optional<uint256_t> const &base_fee_per_gas, uint64_t i,
         ChainContext<traits> const &ctx);
 };
+
+template <Traits traits>
+    requires is_monad_trait_v<traits>
+bool can_account_empty_reserve(
+    Address const &address, uint64_t i, bool address_is_delegated,
+    ChainContext<traits> const &);
 
 template <Traits traits>
     requires is_monad_trait_v<traits>
