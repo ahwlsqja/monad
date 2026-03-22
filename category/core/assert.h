@@ -37,7 +37,9 @@ extern "C"
         #expr, __extension__ __PRETTY_FUNCTION__, __FILE__, __LINE__, msg);
 
 /// Assert, with backtrace upon failure; accepts an optional message, which
-/// must be a compile-time-constant string
+/// must be a compile-time-constant string. Fires in all build types including
+/// Release and RelWithDebInfo — use for invariants that must hold in
+/// production. For debug-only checks see MONAD_DEBUG_ASSERT.
 #define MONAD_ASSERT(expr, ...)                                                \
     if (MONAD_LIKELY(expr)) { /* likeliest */                                  \
     }                                                                          \
@@ -115,7 +117,15 @@ extern "C"
             buf);                                                              \
     }
 
-#ifdef NDEBUG
+/// Debug-only assert; reduced to a type-check only (no runtime cost) when
+/// NDEBUG is defined, typically in Release and RelWithDebInfo builds. Use for
+/// expensive checks that are only needed during development. For invariants
+/// that must hold in production use MONAD_ASSERT instead.
+///
+/// Note: the fuzz toolchain (toolchains/clang-fuzz.cmake) undefines NDEBUG
+/// via -UNDEBUG, so these checks are active in fuzz builds. The CMake option
+/// MONAD_CORE_FORCE_DEBUG_ASSERT also enables them in any build mode.
+#if defined(NDEBUG) && !defined(MONAD_CORE_FORCE_DEBUG_ASSERT)
     #define MONAD_DEBUG_ASSERT(x)                                              \
         do {                                                                   \
             (void)sizeof(x);                                                   \
