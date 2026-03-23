@@ -16,16 +16,19 @@
 #include <category/core/byte_string.hpp>
 #include <category/core/bytes.hpp>
 #include <category/core/hex.hpp>
+#include <category/core/runtime/uint256.hpp>
 #include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/contract/abi_encode.hpp>
 #include <category/execution/ethereum/core/contract/big_endian.hpp>
 #include <category/execution/ethereum/core/contract/events.hpp>
 
+// clang-format off
 #include <gtest/gtest.h>
-#include <intx/intx.hpp>
+#include <evmc/evmc.hpp>
+// clang-format on
 
 using namespace monad;
-using namespace intx::literals;
+using monad::literals::operator""_u256;
 
 TEST(Events, build_undelegation_event)
 {

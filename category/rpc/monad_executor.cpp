@@ -93,7 +93,6 @@
 #include <ankerl/unordered_dense.h>
 #include <evmc/evmc.h>
 #include <evmc/evmc.hpp>
-#include <intx/intx.hpp>
 #include <nlohmann/json_fwd.hpp>
 #include <quill/Quill.h>
 

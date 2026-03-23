@@ -52,10 +52,14 @@ uint256_t calculate_txn_award(
     Transaction const &, uint256_t const &base_fee_per_gas,
     uint64_t gas_used) noexcept;
 
-inline intx::uint512
+inline uint256_t
 max_gas_cost(uint64_t const gas_limit, uint256_t max_fee_per_gas) noexcept
 {
-    return intx::umul(uint256_t{gas_limit}, max_fee_per_gas);
+    if (max_fee_per_gas != 0 &&
+        uint256_t{gas_limit} > UINT256_MAX / max_fee_per_gas) {
+        return UINT256_MAX;
+    }
+    return uint256_t{gas_limit} * max_fee_per_gas;
 }
 
 uint256_t calc_blob_fee(Transaction const &, uint64_t) noexcept;

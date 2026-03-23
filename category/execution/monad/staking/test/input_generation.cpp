@@ -13,13 +13,26 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <category/core/assert.h>
+#include <category/core/byte_string.hpp>
+#include <category/core/bytes.hpp>
+#include <category/core/int.hpp>
+#include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/contract/abi_encode.hpp>
+#include <category/execution/ethereum/core/contract/big_endian.hpp>
 #include <category/execution/monad/staking/test/input_generation.hpp>
 #include <category/execution/monad/staking/util/secp256k1.hpp>
 
 #include <category/core/blake3.hpp>
 
+#include <blst.h>
+#include <secp256k1.h>
+
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <tuple>
+#include <utility>
 
 namespace
 {
@@ -80,7 +93,7 @@ namespace monad::staking::test
                      digest.bytes,
                      seckey.bytes,
                      secp256k1_nonce_function_default,
-                     NULL));
+                     nullptr));
 
         byte_string_fixed<64> serialized;
         MONAD_ASSERT(
@@ -138,7 +151,9 @@ namespace monad::staking::test
         auto const secp_pubkey_serialized = serialize_secp_pubkey(secp_pubkey);
         auto const bls_pubkey_serialized = [&bls_pubkey] {
             byte_string_fixed<48> serialized;
-            blst_p1_compress(serialized.data(), &bls_pubkey);
+            blst_p1_compress(
+                serialized.data(),
+                &bls_pubkey); // NOLINT(clang-analyzer-core.CallAndMessage)
             return serialized;
         }();
 
@@ -149,7 +164,7 @@ namespace monad::staking::test
         message += to_byte_string_view(secp_pubkey_serialized);
         message += to_byte_string_view(bls_pubkey_serialized);
         message += to_byte_string_view(auth_address.bytes);
-        message += to_byte_string_view(intx::be::store<bytes32_t>(stake).bytes);
+        message += to_byte_string_view(be_store_as<bytes32_t>(stake).bytes);
         message += to_byte_string_view(u256_be{commission}.bytes);
 
         // sign with both keys

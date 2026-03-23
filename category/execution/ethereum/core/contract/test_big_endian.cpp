@@ -13,14 +13,14 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <category/core/bytes.hpp>
 #include <category/core/int.hpp>
 #include <category/execution/ethereum/core/contract/big_endian.hpp>
 
 #include <gtest/gtest.h>
-#include <intx/intx.hpp>
 
-#include <limits>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 
 using namespace monad;
 
@@ -41,12 +41,12 @@ TYPED_TEST(BigEndianEncodeTest, uint_max)
     constexpr NativeType native = [] {
         NativeType v{};
         // generate a sequence that has a different big endian representation
-        for (uint8_t i = 1; i <= sizeof(NativeType); ++i) {
-            v = static_cast<NativeType>((v << 8) | i);
+        for (size_t i = 1; i <= sizeof(NativeType); ++i) {
+            v = static_cast<NativeType>((v << 8) | static_cast<NativeType>(i));
         }
         return v;
     }();
-    constexpr NativeType manual_be_conversion = intx::bswap(native);
+    constexpr NativeType manual_be_conversion = bswap(native);
     static_assert(sizeof(BigEndianType) == sizeof(NativeType));
     constexpr BigEndianType be_wrapper = native;
 

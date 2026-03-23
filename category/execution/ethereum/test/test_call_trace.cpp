@@ -14,36 +14,48 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <category/core/byte_string.hpp>
+#include <category/core/bytes.hpp>
 #include <category/core/hex.hpp>
 #include <category/core/int.hpp>
+#include <category/core/keccak.hpp>
 #include <category/execution/ethereum/block_hash_buffer.hpp>
+#include <category/execution/ethereum/chain/chain.hpp>
 #include <category/execution/ethereum/chain/ethereum_mainnet.hpp>
 #include <category/execution/ethereum/core/account.hpp>
 #include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/contract/abi_encode.hpp>
 #include <category/execution/ethereum/core/contract/abi_signatures.hpp>
 #include <category/execution/ethereum/db/trie_db.hpp>
+#include <category/execution/ethereum/db/util.hpp>
 #include <category/execution/ethereum/evmc_host.hpp>
 #include <category/execution/ethereum/execute_transaction.hpp>
 #include <category/execution/ethereum/state2/block_state.hpp>
+#include <category/execution/ethereum/state2/state_deltas.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
+#include <category/execution/ethereum/trace/call_frame.hpp>
 #include <category/execution/ethereum/trace/call_tracer.hpp>
+#include <category/execution/ethereum/types/incarnation.hpp>
 #include <category/execution/monad/chain/monad_chain.hpp>
-#include <category/vm/utils/evm-as.hpp>
+#include <category/vm/code.hpp>
+#include <category/vm/utils/evm-as.hpp> // NOLINT(misc-include-cleaner)
+#include <category/vm/vm.hpp>
 #include <monad/test/traits_test.hpp>
 
 #include <evmc/evmc.h>
 #include <evmc/evmc.hpp>
 
+#include <nlohmann/json.hpp> // NOLINT(misc-include-cleaner)
+
 #include <gtest/gtest.h>
-
-#include <intx/intx.hpp>
-
-#include <nlohmann/json.hpp>
 
 #include <test_resource_data.h>
 
+#include <cstdint>
+#include <limits>
 #include <optional>
+#include <span>
+#include <utility>
+#include <vector>
 
 using namespace monad;
 using namespace monad::literals;
@@ -61,7 +73,7 @@ namespace
 
 TEST(CallFrame, to_json)
 {
-    CallFrame call_frame{
+    CallFrame const call_frame{
         .type = CallType::CALL,
         .from = a,
         .to = std::make_optional(b),
@@ -72,7 +84,7 @@ TEST(CallFrame, to_json)
         .status = EVMC_SUCCESS,
     };
 
-    auto const json_str = R"(
+    auto const *const json_str = R"(
     {
         "from":"0x5353535353535353535353535353535353535353",
         "gas":"0x186a0",
@@ -86,7 +98,9 @@ TEST(CallFrame, to_json)
         "output":"0x"
     })";
 
-    EXPECT_EQ(to_json(call_frame), nlohmann::json::parse(json_str));
+    EXPECT_EQ(
+        to_json(call_frame),
+        nlohmann::json::parse(json_str)); // NOLINT(misc-include-cleaner)
 }
 
 TEST(CallTrace, enter_and_exit)
@@ -154,7 +168,7 @@ TYPED_TEST(TraitsTest, execute_success)
     auto const &beneficiary = ADDR_A;
 
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized buffer{};
+    BlockHashBufferFinalized const buffer{};
     std::vector<CallFrame> call_frames;
     CallTracer call_tracer{tx, call_frames};
     auto const chain_ctx =
@@ -174,7 +188,7 @@ TYPED_TEST(TraitsTest, execute_success)
     EXPECT_TRUE(result.status_code == EVMC_SUCCESS);
     ASSERT_TRUE(call_frames.size() == 1);
 
-    CallFrame expected{
+    CallFrame const expected{
         .type = CallType::CALL,
         .flags = 0,
         .from = sender,
@@ -231,7 +245,7 @@ TYPED_TEST(TraitsTest, execute_reverted_insufficient_balance)
     auto const &beneficiary = ADDR_A;
 
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized buffer{};
+    BlockHashBufferFinalized const buffer{};
     std::vector<CallFrame> call_frames;
     CallTracer call_tracer{tx, call_frames};
     auto const chain_ctx =
@@ -251,7 +265,7 @@ TYPED_TEST(TraitsTest, execute_reverted_insufficient_balance)
     EXPECT_TRUE(result.status_code == EVMC_INSUFFICIENT_BALANCE);
     ASSERT_TRUE(call_frames.size() == 1);
 
-    CallFrame expected{
+    CallFrame const expected{
         .type = CallType::CALL,
         .flags = 0,
         .from = sender,
@@ -313,7 +327,7 @@ TYPED_TEST(TraitsTest, create_call_trace)
     auto const &beneficiary = ADDR_A;
 
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized buffer{};
+    BlockHashBufferFinalized const buffer{};
     std::vector<CallFrame> call_frames;
     CallTracer call_tracer{tx, call_frames};
     auto const chain_ctx =
@@ -429,7 +443,7 @@ TYPED_TEST(TraitsTest, selfdestruct_logs)
     auto const &beneficiary = ADDR_A;
 
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized buffer{};
+    BlockHashBufferFinalized const buffer{};
     std::vector<CallFrame> call_frames;
     CallTracer call_tracer{tx, call_frames};
     auto const chain_ctx =
@@ -509,7 +523,7 @@ TYPED_TEST(TraitsTest, selfdestruct_logs_value)
     auto const &beneficiary = ADDR_C;
 
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized buffer{};
+    BlockHashBufferFinalized const buffer{};
     std::vector<CallFrame> call_frames;
     CallTracer call_tracer{tx, call_frames};
     auto const chain_ctx =
@@ -598,7 +612,7 @@ TYPED_TEST(TraitsTest, selfdestruct_depth)
     auto const &beneficiary = ADDR_A;
 
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized buffer{};
+    BlockHashBufferFinalized const buffer{};
     std::vector<CallFrame> call_frames;
     CallTracer call_tracer{tx, call_frames};
     auto const chain_ctx =
@@ -670,7 +684,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace)
     auto const &beneficiary = ADDR_A;
 
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized buffer{};
+    BlockHashBufferFinalized const buffer{};
     std::vector<CallFrame> call_frames;
     CallTracer call_tracer{tx, call_frames};
 
@@ -714,8 +728,8 @@ TYPED_TEST(TraitsTest, simulate_v1_trace)
         .depth = 0,
         .logs = std::vector<CallFrame::Log>{{
             {
-                .data = byte_string{intx::be::store<bytes32_t, uint256_t>(
-                    1'000'000)},
+                .data =
+                    byte_string{be_store_as<bytes32_t, uint256_t>(1'000'000)},
                 .topics =
                     std::vector{
                         0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef_bytes32,
@@ -778,7 +792,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_selfdestruct)
     auto const &beneficiary = ADDR_C;
 
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized buffer{};
+    BlockHashBufferFinalized const buffer{};
     std::vector<CallFrame> call_frames;
     CallTracer call_tracer{tx, call_frames};
 
@@ -819,7 +833,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_selfdestruct)
 
     CallFrame::Log const expected_log{
         {
-            .data = byte_string{intx::be::store<bytes32_t, uint256_t>(1000)},
+            .data = byte_string{be_store_as<bytes32_t, uint256_t>(1000)},
             .topics =
                 std::vector{
                     0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef_bytes32,
@@ -881,7 +895,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_selfdestruct_zero_balance)
     auto const &beneficiary = ADDR_C;
 
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized buffer{};
+    BlockHashBufferFinalized const buffer{};
     std::vector<CallFrame> call_frames;
     CallTracer call_tracer{tx, call_frames};
 
@@ -952,7 +966,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs)
 
     auto const [selfdestruct_contract, selfdestruct_code_hash] =
         [&]() -> std::pair<monad::vm::SharedIntercode, bytes32_t> {
-        auto eb = evm_as::EvmBuilder<traits>();
+        auto eb = evm_as::EvmBuilder<traits>(); // NOLINT(misc-include-cleaner)
         std::vector<uint8_t> bytecode{};
         evm_as::compile(eb.caller().selfdestruct(), bytecode);
         return {
@@ -964,7 +978,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs)
     auto const [intermediary_contract, intermediary_code_hash] =
         [&]() -> std::pair<monad::vm::SharedIntercode, bytes32_t> {
         using namespace monad::vm::utils::evm_as::sugar;
-        auto eb = evm_as::EvmBuilder<traits>();
+        auto eb = evm_as::EvmBuilder<traits>(); // NOLINT(misc-include-cleaner)
         std::vector<uint8_t> bytecode;
         evm_as::compile(
             eb.call({.gas = 1'000'000, .address = SELFDESTRUCT_CONTRACT_ADDR})
@@ -1023,7 +1037,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs)
     };
 
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized buffer{};
+    BlockHashBufferFinalized const buffer{};
     std::vector<CallFrame> call_frames;
     CallTracer call_tracer{tx, call_frames};
 
@@ -1082,7 +1096,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs)
     // `SELFDESTRUCT_CONTRACT_ADDR` to `INTERMEDIARY_CONTRACT_ADDR` with value
     // 1'000'000 due to the selfdestruct.
     {
-        std::vector<bytes32_t> expected_topics{
+        std::vector<bytes32_t> const expected_topics{
             transfer_signature,
             abi_encode_address(SELFDESTRUCT_CONTRACT_ADDR),
             abi_encode_address(INTERMEDIARY_CONTRACT_ADDR),
@@ -1103,7 +1117,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs)
     // `INTERMEDIARY_CONTRACT_ADDR` to `SELFDESTRUCT_CONTRACT_ADDR` with value
     // 1'000'000 due to the call, which revives the selfdestruct contract.
     {
-        std::vector<bytes32_t> expected_topics{
+        std::vector<bytes32_t> const expected_topics{
             transfer_signature,
             abi_encode_address(INTERMEDIARY_CONTRACT_ADDR),
             abi_encode_address(SELFDESTRUCT_CONTRACT_ADDR)};
@@ -1120,7 +1134,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs)
     // `SELFDESTRUCT_CONTRACT_ADDR` to `INTERMEDIARY_CONTRACT_ADDR` with value
     // 1'000'000 due to the selfdestruct.
     {
-        std::vector<bytes32_t> expected_topics{
+        std::vector<bytes32_t> const expected_topics{
             transfer_signature,
             abi_encode_address(SELFDESTRUCT_CONTRACT_ADDR),
             abi_encode_address(INTERMEDIARY_CONTRACT_ADDR),
@@ -1164,7 +1178,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs_recursive)
     auto const [selfdestruct_contract, selfdestruct_code_hash] =
         [&]() -> std::pair<monad::vm::SharedIntercode, bytes32_t> {
         using namespace monad::vm::utils::evm_as::sugar;
-        auto eb = evm_as::EvmBuilder<traits>();
+        auto eb = evm_as::EvmBuilder<traits>(); // NOLINT(misc-include-cleaner)
         std::vector<uint8_t> bytecode{};
         // In pseudocode:
         // clang-format off
@@ -1237,7 +1251,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_multiple_selfdestructs_recursive)
         .to = SELFDESTRUCT_CONTRACT_ADDR};
 
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized buffer{};
+    BlockHashBufferFinalized const buffer{};
     std::vector<CallFrame> call_frames;
     CallTracer call_tracer{tx, call_frames};
 
@@ -1318,7 +1332,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_transfers)
     auto const [a_contract, a_code_hash] =
         [&]() -> std::pair<monad::vm::SharedIntercode, bytes32_t> {
         using namespace monad::vm::utils::evm_as::sugar;
-        auto eb = evm_as::EvmBuilder<traits>();
+        auto eb = evm_as::EvmBuilder<traits>(); // NOLINT(misc-include-cleaner)
         std::vector<uint8_t> bytecode{};
         evm_as::compile(
             eb.push(0)
@@ -1400,7 +1414,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_transfers)
             .data = calldata};
 
         evmc_tx_context const tx_context{};
-        BlockHashBufferFinalized buffer{};
+        BlockHashBufferFinalized const buffer{};
         std::vector<CallFrame> call_frames;
         CallTracer call_tracer{tx, call_frames};
 
@@ -1442,7 +1456,7 @@ TYPED_TEST(TraitsTest, simulate_v1_trace_transfers)
             ASSERT_TRUE(call_frames[1].logs.has_value());
             ASSERT_EQ(call_frames[1].logs->size(), 1);
 
-            std::vector<bytes32_t> expected_topics{
+            std::vector<bytes32_t> const expected_topics{
                 abi_encode_event_signature("Transfer(address,address,uint256)"),
                 abi_encode_address(ADDR_A),
                 abi_encode_address(ADDR_B)};

@@ -13,26 +13,35 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <category/execution/ethereum/core/contract/abi_decode.hpp>
+#include <category/core/byte_string.hpp>
+#include <category/core/int.hpp>
+#include <category/core/likely.h>
+#include <category/core/result.hpp>
 #include <category/execution/ethereum/core/contract/abi_encode.hpp>
 #include <category/execution/ethereum/core/contract/abi_signatures.hpp>
-#include <category/execution/ethereum/core/contract/events.hpp>
-#include <category/execution/ethereum/core/contract/storage_variable.hpp>
 #include <category/execution/ethereum/reserve_balance.hpp>
+#include <category/execution/ethereum/trace/call_tracer.hpp>
 #include <category/execution/monad/reserve_balance/reserve_balance_contract.hpp>
 #include <category/execution/monad/reserve_balance/reserve_balance_error.hpp>
 #include <category/vm/evm/explicit_traits.hpp>
 
+#include <category/vm/evm/traits.hpp>
+#include <evmc/evmc.h>
+
+#include <algorithm>
+#include <cstdint>
+#include <utility>
+
 #include <boost/outcome/success_failure.hpp>
 #include <boost/outcome/try.hpp>
 
-MONAD_ANONYMOUS_NAMESPACE_BEGIN
+MONAD_ANONYMOUS_NAMESPACE_BEGIN // NOLINT(misc-include-cleaner)
 
-////////////////////////
-// Function Selectors //
-////////////////////////
+    ////////////////////////
+    // Function Selectors //
+    ////////////////////////
 
-struct PrecompileSelector
+    struct PrecompileSelector
 {
     static constexpr uint32_t DIPPED_INTO_RESERVE =
         abi_encode_selector("dippedIntoReserve()");
@@ -48,16 +57,16 @@ constexpr uint64_t DIPPED_INTO_RESERVE_OP_COST = 100; // warm sload coast
 
 constexpr uint64_t FALLBACK_COST = 100;
 
-MONAD_ANONYMOUS_NAMESPACE_END
+MONAD_ANONYMOUS_NAMESPACE_END // NOLINT(misc-include-cleaner)
 
-//
-// Contract implementation
-//
+    //
+    // Contract implementation
+    //
 
-MONAD_NAMESPACE_BEGIN
+    MONAD_NAMESPACE_BEGIN // NOLINT(misc-include-cleaner)
 
-ReserveBalanceContract::ReserveBalanceContract(
-    State &state, CallTracerBase &tracer)
+    ReserveBalanceContract::ReserveBalanceContract(
+        State &state, CallTracerBase &tracer)
     : state_{state}
     , call_tracer_{tracer}
 {
@@ -85,8 +94,9 @@ ReserveBalanceContract::precompile_dispatch(byte_string_view &input)
         return {&ReserveBalanceContract::precompile_fallback, FALLBACK_COST};
     }
 
-    auto const signature =
-        intx::be::unsafe::load<uint32_t>(input.substr(0, 4).data());
+    auto const signature = be_load<uint32_t>(
+        input.substr(0, 4)
+            .data()); // NOLINT(bugprone-suspicious-stringview-data-usage)
     input.remove_prefix(4);
 
     switch (signature) {
@@ -125,4 +135,4 @@ Result<byte_string> ReserveBalanceContract::precompile_fallback(
     return ReserveBalanceError::MethodNotSupported;
 }
 
-MONAD_NAMESPACE_END
+MONAD_NAMESPACE_END // NOLINT(misc-include-cleaner)

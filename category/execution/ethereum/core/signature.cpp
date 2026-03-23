@@ -18,6 +18,8 @@
 #include <category/core/monad_exception.hpp>
 #include <category/execution/ethereum/core/signature.hpp>
 
+#include <limits>
+
 MONAD_NAMESPACE_BEGIN
 
 void SignatureAndChain::from_v(uint256_t const &v)
@@ -33,7 +35,7 @@ void SignatureAndChain::from_v(uint256_t const &v)
         auto tmp = v - 35;
         if (tmp & 1u) {
             y_parity = 1;
-            tmp ^= 1u;
+            tmp = tmp ^ 1u;
         }
         chain_id = tmp >> 1;
     }

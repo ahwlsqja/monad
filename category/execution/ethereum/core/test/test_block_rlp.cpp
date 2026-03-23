@@ -14,21 +14,25 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <category/core/byte_string.hpp>
+#include <category/core/bytes.hpp>
+#include <category/core/runtime/uint256.hpp>
 #include <category/execution/ethereum/core/block.hpp>
 #include <category/execution/ethereum/core/rlp/block_rlp.hpp>
 #include <category/execution/ethereum/core/transaction.hpp>
 #include <category/execution/ethereum/db/block_db.hpp>
 
-#include <intx/intx.hpp>
-
+// clang-format off
 #include <gtest/gtest.h>
+#include <evmc/evmc.hpp>
+// clang-format on
 
 #include <test_resource_data.h>
 
+#include <cstdint>
 #include <optional>
 
 using namespace monad;
-using namespace intx;
+using monad::literals::operator""_u256;
 using namespace monad::literals;
 
 TEST(Rlp_Block, DecodeEncodeBlock46402)
@@ -753,7 +757,7 @@ TEST(Rlp_Block, DecodeEncodeShanghai)
         0xfc, 0xe5, 0xed, 0xbc, 0x8e, 0x2a, 0x86, 0x97, 0xc1, 0x53, 0x31, 0x67,
         0x7e, 0x6e, 0xbf, 0x0b, 0x82, 0x27, 0x10};
 
-    auto const encoded_block_copy = encoded_block;
+    auto const &encoded_block_copy = encoded_block;
     byte_string_view encoded_block_view{encoded_block};
 
     auto const decoded_block = rlp::decode_block(encoded_block_view);
@@ -927,7 +931,7 @@ TEST(Rlp_Block, DecodeEncodeCancun)
         0xe5, 0xed, 0xbc, 0x8e, 0x2a, 0x86, 0x97, 0xc1, 0x53, 0x31, 0x67, 0x7e,
         0x6e, 0xbf, 0x0b, 0x82, 0x27, 0x10};
 
-    auto const encoded_block_copy = encoded_block;
+    auto const &encoded_block_copy = encoded_block;
     byte_string_view encoded_block_view{encoded_block};
 
     auto const decoded_block = rlp::decode_block(encoded_block_view);
@@ -1050,7 +1054,7 @@ TEST(Rlp_Block, DecodeEncodeCancun)
 
 TEST(Rlp_block, IntTypeMismatchRegression)
 {
-    using intx::operator""_u256;
+    using monad::literals::operator""_u256;
 
     auto const block_header = BlockHeader{
         .base_fee_per_gas = 0xFFFFFFFFFFFFFFFFFF_u256,

@@ -18,13 +18,11 @@
 #include <category/core/byte_string.hpp>
 #include <category/core/bytes.hpp>
 #include <category/core/hex.hpp>
+#include <category/core/int.hpp>
 #include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
-#include <monad/test/config.hpp>
 
 #include <evmc/evmc.h>
-
-#include <intx/intx.hpp>
 
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
@@ -56,7 +54,7 @@ namespace nlohmann
             }
 
             state.add_to_balance(
-                account_address, j_acc.at("balance").get<intx::uint256>());
+                account_address, j_acc.at("balance").get<monad::uint256_t>());
             // we cannot use the nlohmann::json from_json<uint64_t> because
             // it does not use the strtoull implementation, whereas we need
             // it so we can turn a hex string into a uint64_t

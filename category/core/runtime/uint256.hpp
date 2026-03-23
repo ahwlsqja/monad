@@ -16,16 +16,20 @@
 #pragma once
 
 #include <category/core/assert.h>
+#include <category/core/likely.h>
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <climits>
+#include <concepts>
 #include <cstdint>
 #include <cstring>
 #include <format>
 #include <immintrin.h>
 #include <limits>
 #include <stdexcept>
+#include <string>
 #include <type_traits>
 
 #ifndef __AVX2__
@@ -222,14 +226,14 @@ namespace monad::vm::runtime
         }
     };
 
-    typedef unsigned __int128 uint128_t;
-    typedef __int128 int128_t;
+    typedef unsigned __int128 u128;
+    typedef __int128 i128;
 
     [[gnu::always_inline]]
     constexpr inline div_result<uint64_t>
     div_constexpr(uint64_t u_hi, uint64_t u_lo, uint64_t const v) noexcept
     {
-        auto const u = (static_cast<uint128_t>(u_hi) << 64) | u_lo;
+        auto const u = (static_cast<u128>(u_hi) << 64) | u_lo;
         auto const quot = static_cast<uint64_t>(u / v);
         auto const rem = static_cast<uint64_t>(u % v);
         return {.quot = quot, .rem = rem};
@@ -644,6 +648,20 @@ namespace monad::vm::runtime
             return load_le_unsafe(bytes).to_be();
         }
 
+        [[gnu::always_inline]]
+        static inline uint256_t be_load(uint8_t const *src) noexcept
+        {
+            return load_be_unsafe(src);
+        }
+
+        template <typename Src>
+            requires requires(Src s) { s.bytes; }
+        [[gnu::always_inline]]
+        static inline uint256_t be_load(Src const &src) noexcept
+        {
+            return load_be_unsafe(src.bytes);
+        }
+
         [[gnu::always_inline]] static inline constexpr uint256_t
         load_le_unsafe(uint8_t const *bytes) noexcept
         {
@@ -783,9 +801,8 @@ namespace monad::vm::runtime
         uint64_t const x, uint64_t const y, uint64_t &r_hi,
         uint64_t &r_lo) noexcept
     {
-        uint128_t const prod =
-            static_cast<uint128_t>(x) * static_cast<uint128_t>(y);
-        r_hi = static_cast<uint64_t>(prod >> uint128_t{64});
+        u128 const prod = static_cast<u128>(x) * static_cast<u128>(y);
+        r_hi = static_cast<uint64_t>(prod >> u128{64});
         r_lo = static_cast<uint64_t>(prod);
     }
 
@@ -1088,6 +1105,54 @@ namespace monad::vm::runtime
         return truncating_mul(lhs, rhs);
     }
 
+    [[gnu::always_inline]] inline constexpr uint256_t &
+    operator+=(uint256_t &lhs, uint256_t const &rhs) noexcept
+    {
+        return lhs = lhs + rhs;
+    }
+
+    [[gnu::always_inline]] inline constexpr uint256_t &
+    operator-=(uint256_t &lhs, uint256_t const &rhs) noexcept
+    {
+        return lhs = lhs - rhs;
+    }
+
+    [[gnu::always_inline]] inline constexpr uint256_t &
+    operator*=(uint256_t &lhs, uint256_t const &rhs) noexcept
+    {
+        return lhs = lhs * rhs;
+    }
+
+    [[gnu::always_inline]] inline constexpr uint256_t &
+    operator/=(uint256_t &lhs, uint256_t const &rhs) noexcept
+    {
+        return lhs = lhs / rhs;
+    }
+
+    [[gnu::always_inline]] inline constexpr uint256_t &
+    operator%=(uint256_t &lhs, uint256_t const &rhs) noexcept
+    {
+        return lhs = lhs % rhs;
+    }
+
+    [[gnu::always_inline]] inline constexpr uint256_t &
+    operator^=(uint256_t &lhs, uint256_t const &rhs) noexcept
+    {
+        return lhs = lhs ^ rhs;
+    }
+
+    [[gnu::always_inline]] inline constexpr uint256_t &
+    operator|=(uint256_t &lhs, uint256_t const &rhs) noexcept
+    {
+        return lhs = lhs | rhs;
+    }
+
+    [[gnu::always_inline]] inline constexpr uint256_t &
+    operator&=(uint256_t &lhs, uint256_t const &rhs) noexcept
+    {
+        return lhs = lhs & rhs;
+    }
+
     [[gnu::always_inline]]
     constexpr uint64_t
     long_div(size_t m, uint64_t const *u, uint64_t v, uint64_t *quot)
@@ -1115,7 +1180,7 @@ namespace monad::vm::runtime
 
         for (int i = static_cast<int>(m - n); i >= 0; i--) {
             auto const ix = static_cast<size_t>(i);
-            uint128_t q_hat;
+            u128 q_hat;
             // We diverge from the algorithms in Knuth AOCP and Hacker's Delight
             // as we need to check for potential division overflow before
             // dividing.
@@ -1171,7 +1236,7 @@ namespace monad::vm::runtime
                 }
 
                 q_hat = q_hat0;
-                uint128_t const r_hat = r_hat0;
+                u128 const r_hat = r_hat0;
 
                 if (q_hat * v[n - 2] > (r_hat << BASE_SHIFT) + u[ix + n - 2]) {
                     q_hat--;
@@ -1179,14 +1244,14 @@ namespace monad::vm::runtime
             }
 
             // u[ix+n .. ix] -= q_hat * v[n .. 0]
-            uint128_t t = 0;
-            uint128_t k = 0;
+            u128 t = 0;
+            u128 k = 0;
             for (size_t j = 0; j < n; j++) {
-                uint128_t const prod = q_hat * v[j];
+                u128 const prod = q_hat * v[j];
                 t = u[j + ix] - k - (prod & 0xffffffffffffffff);
                 u[j + ix] = static_cast<uint64_t>(t);
                 k = (prod >> 64) -
-                    static_cast<uint128_t>(static_cast<int128_t>(t) >> 64);
+                    static_cast<u128>(static_cast<i128>(t) >> 64);
             }
             t = u[ix + n] - k;
             u[ix + n] = static_cast<uint64_t>(t);
@@ -1196,9 +1261,9 @@ namespace monad::vm::runtime
             // q_hat -= 1
             if (t >> 127) {
                 q_hat -= 1;
-                uint128_t k = 0;
+                u128 k = 0;
                 for (size_t j = 0; j < n; j++) {
-                    t = static_cast<uint128_t>(u[ix + j]) + v[j] + k;
+                    t = static_cast<u128>(u[ix + j]) + v[j] + k;
                     u[ix + j] = static_cast<uint64_t>(t);
                     k = t >> 64;
                 }
@@ -1363,7 +1428,7 @@ namespace monad::vm::runtime
         auto const x_neg = x[uint256_t::num_words - 1] >> 63;
         auto const y_neg = y[uint256_t::num_words - 1] >> 63;
         auto const diff = x_neg ^ y_neg;
-        // intx branches on the sign bit, which will be mispredicted on
+        // branching on the sign bit will be mispredicted on
         // random data ~50% of the time. The branchless version does not add
         // much overhead so it is probably worth it
         return (~diff & (x < y)) | (x_neg & ~y_neg);

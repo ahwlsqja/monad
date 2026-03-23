@@ -35,7 +35,7 @@ constexpr Result<T> decode_raw_num(byte_string_view const enc)
     }
 
     if (enc.empty()) {
-        return 0;
+        return T{};
     }
 
     if (enc[0] == 0) {
@@ -44,10 +44,8 @@ constexpr Result<T> decode_raw_num(byte_string_view const enc)
 
     T result{};
     std::memcpy(
-        &intx::as_bytes(result)[sizeof(T) - enc.size()],
-        enc.data(),
-        enc.size());
-    result = intx::to_big_endian(result);
+        &as_bytes(result)[sizeof(T) - enc.size()], enc.data(), enc.size());
+    result = to_big_endian(result);
     return result;
 }
 

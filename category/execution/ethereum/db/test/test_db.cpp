@@ -13,27 +13,38 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <category/async/config.hpp>
+#include <category/async/util.hpp>
+#include <category/core/assert.h>
+#include <category/core/byte_string.hpp>
+#include <category/core/bytes.hpp>
 #include <category/core/keccak.hpp>
+#include <category/core/runtime/uint256.hpp>
 #include <category/execution/ethereum/core/account.hpp>
+#include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/receipt.hpp>
-#include <category/execution/ethereum/core/rlp/block_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/int_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/transaction_rlp.hpp>
 #include <category/execution/ethereum/core/transaction.hpp>
 #include <category/execution/ethereum/db/trie_db.hpp>
 #include <category/execution/ethereum/db/util.hpp>
 #include <category/execution/ethereum/rlp/encode2.hpp>
+#include <category/execution/ethereum/state2/state_deltas.hpp>
+#include <category/execution/ethereum/trace/call_frame.hpp>
 #include <category/execution/ethereum/trace/rlp/call_frame_rlp.hpp>
+#include <category/mpt/db.hpp>
 #include <category/mpt/nibbles_view.hpp>
 #include <category/mpt/node.hpp>
 #include <category/mpt/ondisk_db_config.hpp>
 #include <category/mpt/test/test_fixtures_gtest.hpp>
-#include <category/mpt/traverse.hpp>
 #include <category/mpt/traverse_util.hpp>
+#include <category/mpt/util.hpp>
+#include <category/vm/vm.hpp>
 
-#include <ethash/keccak.hpp>
-#include <intx/intx.hpp>
 #include <nlohmann/json_fwd.hpp>
+
+#include <evmc/evmc.h>
+#include <evmc/evmc.hpp>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -41,11 +52,14 @@
 #include <test_resource_data.h>
 
 #include <algorithm>
-#include <bit>
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <memory>
+#include <numeric>
 #include <optional>
 #include <set>
 #include <string>
@@ -130,7 +144,7 @@ namespace
             std::make_move_iterator(chunks.end()),
             byte_string{},
             [](byte_string const acc, KeyedChunk const chunk) {
-                return std::move(acc) + std::move(chunk.second);
+                return acc + chunk.second;
             });
 
         byte_string_view view{call_frames_encoded};
@@ -469,7 +483,7 @@ TYPED_TEST(DBTest, storage_deletion)
 
 TYPED_TEST(DBTest, commit_receipts_transactions)
 {
-    using namespace intx;
+    using monad::literals::operator""_u256;
     using namespace evmc::literals;
 
     TrieDb tdb{this->db};
@@ -649,7 +663,7 @@ TYPED_TEST(DBTest, commit_receipts_transactions)
 
 TEST_F(OnDiskTrieDbWithFileFixture, get_transactions)
 {
-    using namespace intx;
+    using monad::literals::operator""_u256;
     using namespace evmc::literals;
 
     TrieDb tdb{this->db};
@@ -682,7 +696,7 @@ TEST_F(OnDiskTrieDbWithFileFixture, get_transactions)
     std::vector<Receipt> receipts;
     receipts.resize(transactions.size());
     call_frames.resize(receipts.size());
-    std::vector<Address> senders = recover_senders(transactions);
+    std::vector<Address> const senders = recover_senders(transactions);
     commit_sequential(
         tdb,
         StateDeltas{},
@@ -696,7 +710,7 @@ TEST_F(OnDiskTrieDbWithFileFixture, get_transactions)
     auto verify_transactions = [&](auto &db) {
         auto const txs_res = get_transactions(db, block_number);
         ASSERT_TRUE(txs_res.has_value());
-        auto const txs = txs_res.value();
+        auto const &txs = txs_res.value();
         EXPECT_EQ(txs.size(), transactions.size());
         for (size_t i = 0; i < txs.size(); ++i) {
             EXPECT_EQ(txs[i], transactions[i]);
@@ -897,12 +911,14 @@ TYPED_TEST(DBTest, commit_call_frames)
     static byte_string const encoded_txn = byte_string{0x1a, 0x1b, 0x1c};
     std::vector<CallFrame> const call_frame{call_frame1, call_frame2};
     std::vector<std::vector<CallFrame>> call_frames;
+    call_frames.reserve(NUM_TXNS);
     for (uint64_t txn = 0; txn < NUM_TXNS; ++txn) {
         call_frames.emplace_back(call_frame);
     }
     std::vector<Receipt> const receipts(call_frames.size());
     // need to increment the nonce of transactions
     std::vector<Transaction> transactions;
+    transactions.reserve(call_frames.size());
     for (uint64_t nonce = 0; nonce < call_frames.size(); ++nonce) {
         transactions.push_back(Transaction{.nonce = nonce});
     }

@@ -14,7 +14,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <category/core/bytes.hpp>
-#include <category/execution/ethereum/core/address.hpp>
+#include <category/core/runtime/uint256.hpp>
+#include <category/execution/ethereum/core/account.hpp>
 #include <category/execution/ethereum/core/contract/big_endian.hpp>
 #include <category/execution/ethereum/core/contract/storage_array.hpp>
 #include <category/execution/ethereum/core/contract/storage_variable.hpp>
@@ -23,15 +24,23 @@
 #include <category/execution/ethereum/state2/block_state.hpp>
 #include <category/execution/ethereum/state2/state_deltas.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
+#include <category/mpt/db.hpp>
 #include <category/vm/vm.hpp>
 
 #include <test_resource_data.h>
 
+// clang-format off
 #include <gtest/gtest.h>
+#include <evmc/evmc.hpp>
+// clang-format on
+
+#include <cstdint>
+#include <optional>
+#include <ostream>
 
 using namespace monad;
 using namespace monad::test;
-using namespace intx::literals;
+using monad::literals::operator""_u256;
 
 struct Storage : public ::testing::Test
 {
@@ -95,7 +104,7 @@ TEST_F(Storage, struct)
     s.z = s.z.native() * 2;
     var.store(s);
     ASSERT_TRUE(var.load_checked().has_value());
-    S s2 = var.load();
+    S const s2 = var.load();
     EXPECT_EQ(s2.x.native(), 8);
     EXPECT_EQ(s2.y.native(), 10);
     EXPECT_EQ(s2.z.native(), 12);

@@ -20,8 +20,8 @@
 #include <category/execution/ethereum/precompiles.hpp>
 
 #include <blst.h>
-#include <intx/intx.hpp>
 
+#include <array>
 #include <cstdint>
 #include <optional>
 
@@ -29,10 +29,21 @@ MONAD_NAMESPACE_BEGIN
 
 namespace bls12
 {
-    using namespace intx::literals;
-
-    inline constexpr auto BASE_FIELD_MODULUS =
-        0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab_u384;
+    // BLS12-381 field prime p per EIP-2537:
+    // p =
+    // 0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab
+    // Encoded as 16 zero-padding bytes followed by the 48-byte big-endian
+    // prime.
+    inline constexpr std::array<uint8_t, 64> BASE_FIELD_MODULUS_BYTES = {
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // 16 zero padding bytes
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1a, 0x01,
+        0x11, 0xea, 0x39, 0x7f, 0xe6, 0x9a, // 48-byte BLS12-381 field prime
+        0x4b, 0x1b, 0xa7, 0xb6, 0x43, 0x4b, 0xac, 0xd7, 0x64, 0x77,
+        0x4b, 0x84, 0xf3, 0x85, 0x12, 0xbf, 0x67, 0x30, 0xd2, 0xa0,
+        0xf6, 0xb0, 0xf6, 0x24, 0x1e, 0xab, 0xff, 0xfe, 0xb1, 0x53,
+        0xff, 0xff, 0xb9, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xaa, 0xab,
+    };
+    static_assert(BASE_FIELD_MODULUS_BYTES.size() == 64);
 
     template <typename Group>
     uint16_t msm_discount(uint64_t);

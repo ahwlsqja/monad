@@ -16,18 +16,21 @@
 #include <category/core/assert.h>
 #include <category/core/byte_string.hpp>
 #include <category/core/bytes.hpp>
+#include <category/core/config.hpp>
 #include <category/core/hex.hpp>
+#include <category/core/int.hpp>
+#include <category/core/likely.h>
+#include <category/core/runtime/uint256.hpp>
 #include <category/execution/ethereum/precompiles.hpp>
 #include <category/execution/ethereum/precompiles_bls12.hpp>
+#include <category/vm/core/assert.h>
 #include <category/vm/evm/explicit_traits.hpp>
+#include <category/vm/evm/traits.hpp>
 
 #include <cryptopp/eccrypto.h>
 #include <cryptopp/ecp.h>
 #include <cryptopp/integer.h>
-#include <cryptopp/nbtheory.h>
 #include <cryptopp/oids.h>
-
-#include <blst.h>
 
 #include <c-kzg-4844/trusted_setup.hpp>
 
@@ -35,15 +38,20 @@
 
 #include <evmc/evmc.h>
 
-#include <intx/intx.hpp>
-
 #include <setup/settings.h>
 #include <setup/setup.h>
 
 #include <silkpre/precompile.h>
 #include <silkpre/sha256.h>
 
+#include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <limits>
+#include <optional>
+#include <string_view>
 
 namespace
 {
@@ -91,9 +99,13 @@ bool init_trusted_setup()
     if (!g_trustedSetup.has_value()) {
         auto const setup = c_kzg_4844::trusted_setup_data();
         KZGSettings settings;
-        FILE *fp = fmemopen((void *)(setup.data()), setup.size(), "r");
+        FILE *fp = fmemopen(
+            (void *)(setup.data()),
+            setup.size(),
+            "r"); // NOLINT(misc-include-cleaner)
         if (fp) {
-            if (load_trusted_setup_file(&settings, fp, 0) == C_KZG_OK) {
+            if (load_trusted_setup_file(&settings, fp, 0) ==
+                C_KZG_OK) { // NOLINT(misc-include-cleaner)
                 g_trustedSetup.emplace(settings);
             }
             fclose(fp);
@@ -256,8 +268,6 @@ constexpr uint64_t expmod_min_gas()
     }
 }
 
-// TODO(LH): Replace calls to this function with uint256_t::load_be_unsafe when
-// migrating off intx.
 static uint256_t
 uint256_load_partial_be(byte_string_view const input, size_t const len)
 {
@@ -268,10 +278,10 @@ uint256_load_partial_be(byte_string_view const input, size_t const len)
     uint256_t result{};
     MONAD_VM_ASSERT(32 >= len);
     std::memcpy(
-        intx::as_bytes(result) + (32 - len),
+        as_bytes(result) + (32 - len),
         input.data(),
         std::min(len, input.size()));
-    return intx::to_big_endian(result);
+    return to_big_endian(result);
 }
 
 template <Traits traits>
@@ -320,7 +330,7 @@ std::optional<uint64_t> expmod_gas_cost(byte_string_view const input)
         exp_head = uint256_load_partial_be(
             input.substr(exp_index), std::min(32ul, exp_len64));
     }
-    size_t const bit_len{256 - clz(exp_head)};
+    size_t const bit_len{256 - vm::runtime::countl_zero(exp_head)};
 
     uint256_t const iteration_count{
         expmod_iteration_count<traits>(exp_len256, bit_len)};
@@ -329,7 +339,7 @@ std::optional<uint64_t> expmod_gas_cost(byte_string_view const input)
     uint256_t const gas = mult_complexity<traits>(max_length) *
                           iteration_count / expmod_gas_denominator<traits>();
 
-    if (intx::count_significant_words(gas) > 1) {
+    if (gas > std::numeric_limits<uint64_t>::max()) {
         return std::numeric_limits<uint64_t>::max();
     }
     else {
@@ -420,7 +430,9 @@ PrecompileResult sha256_execute(byte_string_view const input)
         // undefined behaviour. We sidestep the UB here by passing a pointer to
         // the empty string instead.
         byte_string_view const nonnull{
-            reinterpret_cast<unsigned char const *>(""), 0UL};
+            reinterpret_cast<unsigned char const *>(
+                ""), // NOLINT(bugprone-string-constructor)
+            0UL};
         return silkpre_execute<silkpre_sha256_run>(nonnull);
     }
     return silkpre_execute<silkpre_sha256_run>(input);
@@ -477,16 +489,16 @@ PrecompileResult point_evaluation_execute(byte_string_view input)
     bytes32_t versioned_hash;
     std::memcpy(versioned_hash.bytes, input.data(), sizeof(bytes32_t));
 
-    auto const *const z =
-        reinterpret_cast<Bytes32 const *>(input.substr(32).data());
-    auto const *const y =
-        reinterpret_cast<Bytes32 const *>(input.substr(64).data());
+    auto const *const z = reinterpret_cast<Bytes32 const *>(
+        input.substr(32).data()); // NOLINT(misc-include-cleaner)
+    auto const *const y = reinterpret_cast<Bytes32 const *>(
+        input.substr(64).data()); // NOLINT(misc-include-cleaner)
     auto const *const commitment_data =
         reinterpret_cast<KZGCommitment const *>(input.substr(96).data());
     auto const *const proof =
         reinterpret_cast<KZGProof const *>(input.substr(144).data());
 
-    KZGCommitment commitment{*commitment_data};
+    KZGCommitment const commitment{*commitment_data};
     if (versioned_hash != kzg_to_version_hashed(commitment)) {
         return PrecompileResult::failure();
     }
@@ -497,7 +509,8 @@ PrecompileResult point_evaluation_execute(byte_string_view input)
         return PrecompileResult::failure();
     }
 
-    auto *const output = static_cast<uint8_t *>(std::malloc(sizeof(bytes64_t)));
+    auto *const output = static_cast<uint8_t *>(std::malloc(
+        sizeof(bytes64_t))); // NOLINT(clang-analyzer-unix.MallocSizeof)
     MONAD_ASSERT(output != nullptr);
     std::memcpy(
         output, blob_precompile_return_value().bytes, sizeof(bytes64_t));
@@ -561,13 +574,14 @@ PrecompileResult p256_verify_execute(byte_string_view const input)
         return empty_result;
     }
 
-    Integer h(input.data(), 32);
-    Integer r(input.data() + 32, 32);
-    Integer s(input.data() + 64, 32);
-    Integer qx(input.data() + 96, 32);
-    Integer qy(input.data() + 128, 32);
+    Integer const h(
+        input.data(), 32); // NOLINT(bugprone-suspicious-stringview-data-usage)
+    Integer const r(input.data() + 32, 32);
+    Integer const s(input.data() + 64, 32);
+    Integer const qx(input.data() + 96, 32);
+    Integer const qy(input.data() + 128, 32);
 
-    DL_GroupParameters_EC<ECP> params(ASN1::secp256r1());
+    DL_GroupParameters_EC<ECP> const params(ASN1::secp256r1());
     auto const &ec = params.GetCurve();
     auto const &n = params.GetSubgroupOrder();
     auto const p_mod = ec.FieldSize();
@@ -610,7 +624,7 @@ PrecompileResult p256_verify_execute(byte_string_view const input)
 
     auto const p1 = ec.Multiply(u1, G);
     auto const p2 = ec.Multiply(u2, {qx, qy});
-    auto const r_prime = ec.Add(p1, p2);
+    auto const &r_prime = ec.Add(p1, p2);
 
     // If R' is at infinity: return
     if (r_prime.identity) {

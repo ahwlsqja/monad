@@ -37,7 +37,6 @@ target_include_directories(monad-vm-llvm
 )
 
 target_link_libraries(monad-vm-llvm
-    PUBLIC intx::intx
     PUBLIC evmc::evmc
     PUBLIC monad-vm::monad-vm-evm
     PUBLIC monad-vm::monad-vm-runtime

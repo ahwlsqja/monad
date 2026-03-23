@@ -28,7 +28,6 @@ using namespace monad::rlp;
 
 TEST(Rlp_Account, Encode)
 {
-    using namespace intx;
     using namespace evmc::literals;
 
     static constexpr uint256_t b{24'000'000};

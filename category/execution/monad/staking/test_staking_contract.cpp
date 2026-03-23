@@ -16,14 +16,18 @@
 #include <category/core/blake3.hpp>
 #include <category/core/byte_string.hpp>
 #include <category/core/bytes.hpp>
+#include <category/core/int.hpp>
 #include <category/core/monad_exception.hpp>
 #include <category/core/result.hpp>
+#include <category/core/runtime/uint256.hpp>
+#include <category/execution/ethereum/core/account.hpp>
 #include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/contract/abi_decode.hpp>
 #include <category/execution/ethereum/core/contract/abi_decode_error.hpp>
 #include <category/execution/ethereum/core/contract/abi_encode.hpp>
 #include <category/execution/ethereum/core/contract/abi_signatures.hpp>
 #include <category/execution/ethereum/core/contract/big_endian.hpp>
+#include <category/execution/ethereum/core/contract/storage_array.hpp>
 #include <category/execution/ethereum/core/fmt/address_fmt.hpp> // NOLINT
 #include <category/execution/ethereum/core/fmt/int_fmt.hpp> // NOLINT
 #include <category/execution/ethereum/db/trie_db.hpp>
@@ -31,14 +35,17 @@
 #include <category/execution/ethereum/state2/block_state.hpp>
 #include <category/execution/ethereum/state2/state_deltas.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
+#include <category/execution/ethereum/trace/call_tracer.hpp>
 #include <category/execution/monad/staking/staking_contract.hpp>
 #include <category/execution/monad/staking/test/input_generation.hpp>
-#include <category/execution/monad/staking/util/bls.hpp>
 #include <category/execution/monad/staking/util/constants.hpp>
 #include <category/execution/monad/staking/util/staking_error.hpp>
 #include <category/execution/monad/system_sender.hpp>
-#include <category/vm/evm/traits.hpp>
+#include <category/mpt/db.hpp>
+#include <category/vm/evm/monad/revision.h>
 #include <category/vm/vm.hpp>
+#include <evmc/evmc.h>
+#include <evmc/evmc.hpp>
 #include <monad/test/traits_test.hpp>
 
 #include <test_resource_data.h>
@@ -46,14 +53,22 @@
 #include <boost/outcome/success_failure.hpp>
 #include <boost/outcome/try.hpp>
 
+#include <algorithm>
+#include <array>
+#include <cstddef>
 #include <cstdint>
-#include <memory>
+#include <cstring>
+#include <limits>
+#include <optional>
 #include <ranges>
+#include <set>
+#include <string>
+#include <tuple>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
-#include <intx/intx.hpp>
 
 using namespace monad;
 using namespace monad::staking;
@@ -114,7 +129,7 @@ struct StakeTraits : public MonadTraitsTest<MonadRevisionT>
             Code{},
             BlockHeader{});
         state.add_to_balance(STAKING_CA, 0); // create account like a txn would
-        u64_be start_epoch{1};
+        u64_be const start_epoch{1};
         contract.vars.epoch.store(start_epoch);
     }
 
@@ -217,7 +232,7 @@ struct StakeTraits : public MonadTraitsTest<MonadRevisionT>
     {
         auto const [input, sign_address] =
             craft_add_validator_input(auth_address, stake, commission, secret);
-        auto const msg_value = intx::be::store<evmc_uint256be>(stake);
+        auto const msg_value = be_store_as<evmc_uint256be>(stake);
         state.push();
         auto res = contract.precompile_add_validator<Trait>(
             input, auth_address, msg_value);
@@ -233,7 +248,7 @@ struct StakeTraits : public MonadTraitsTest<MonadRevisionT>
         u64_be const val_id, Address const &del_address, uint256_t const &stake)
     {
         auto const input = abi_encode_uint<u64_be>(val_id);
-        auto const msg_value = intx::be::store<evmc_uint256be>(stake);
+        auto const msg_value = be_store_as<evmc_uint256be>(stake);
         state.push();
         auto res =
             contract.precompile_delegate<Trait>(input, del_address, msg_value);
@@ -302,7 +317,7 @@ struct StakeTraits : public MonadTraitsTest<MonadRevisionT>
         u64_be const val_id, Address const &sender, uint256_t const &reward)
     {
         auto const input = abi_encode_uint<u64_be>(val_id);
-        auto const msg_value = intx::be::store<evmc_uint256be>(reward);
+        auto const msg_value = be_store_as<evmc_uint256be>(reward);
         state.push();
         auto res =
             contract.precompile_external_reward(input, sender, msg_value);
@@ -347,7 +362,7 @@ DEFINE_MONAD_TRAITS_FIXTURE(StakeAllRevisions);
 TEST_F(StakeLatest, invoke_fallback)
 {
     auto const sender = 0xdeadbeef_address;
-    auto const value = intx::be::store<evmc_uint256be>(MIN_VALIDATE_STAKE);
+    auto const value = be_store_as<evmc_uint256be>(MIN_VALIDATE_STAKE);
 
     byte_string_fixed<8> const signature_bytes = {0xff, 0xff, 0xff, 0xff};
     auto signature = to_byte_string_view(signature_bytes);
@@ -377,8 +392,8 @@ TEST_F(StakeLatest, accumulator_is_monotonic_again)
 
     fmt::println(
         "Initial Balance {} - accumulator: {}",
-        intx::to_string(validator1.stake().load().native(), 10),
-        intx::to_string(
+        to_string(validator1.stake().load().native(), 10),
+        to_string(
             validator1.accumulated_reward_per_token().load().native(), 10));
 
     constexpr size_t NUM_ITERATIONS = 10;
@@ -390,10 +405,10 @@ TEST_F(StakeLatest, accumulator_is_monotonic_again)
         fmt::println(
             "Iteration {} - accumulator: {}",
             i,
-            intx::to_string(current_accumulator, 10));
+            to_string(current_accumulator, 10));
         fmt::println(
             "curr Balance {}",
-            intx::to_string(validator.stake().load().native(), 10));
+            to_string(validator.stake().load().native(), 10));
 
         // Check that accumulator is monotonically increasing
         ASSERT_GE(current_accumulator, previous_accumulator);
@@ -410,8 +425,8 @@ TEST_F(StakeLatest, accumulator_is_monotonic_again)
 
     fmt::println(
         "Terminal Balance {} - accumulator: {}",
-        intx::to_string(validator.stake().load().native(), 10),
-        intx::to_string(
+        to_string(validator.stake().load().native(), 10),
+        to_string(
             validator.accumulated_reward_per_token().load().native(), 10));
 }
 
@@ -467,7 +482,7 @@ INSTANTIATE_TEST_SUITE_P(
             1000 * MON)),
     [](::testing::TestParamInfo<std::tuple<uint64_t, uint256_t>> const &info) {
         return std::to_string(std::get<0>(info.param)) + "_" +
-               intx::to_string(std::get<1>(info.param));
+               to_string(std::get<1>(info.param));
     });
 
 TEST_P(StakeCommission, validator_has_commission)
@@ -583,9 +598,9 @@ TEST_F(StakeLatest, validator_changes_commission)
 TEST_F(StakeLatest, add_validator_revert_invalid_input_size)
 {
     auto const sender = 0xdeadbeef_address;
-    auto const value = intx::be::store<evmc_uint256be>(MIN_VALIDATE_STAKE);
+    auto const value = be_store_as<evmc_uint256be>(MIN_VALIDATE_STAKE);
 
-    byte_string_view too_short{};
+    byte_string_view const too_short{};
     auto res =
         contract.precompile_add_validator<Trait>(too_short, sender, value);
     EXPECT_EQ(res.assume_error(), AbiDecodeError::InputTooShort);
@@ -601,7 +616,7 @@ TEST_F(StakeLatest, add_validator_revert_bad_signature)
 {
     auto const [message, good_secp_sig, good_bls_sig, _] =
         craft_add_validator_input_raw(0xababab_address, MIN_VALIDATE_STAKE);
-    auto const value = intx::be::store<evmc_uint256be>(MIN_VALIDATE_STAKE);
+    auto const value = be_store_as<evmc_uint256be>(MIN_VALIDATE_STAKE);
 
     // bad secp signature
     {
@@ -636,7 +651,7 @@ TEST_F(StakeLatest, add_validator_revert_bad_signature)
 
 TEST_F(StakeLatest, add_validator_revert_msg_value_not_signed)
 {
-    auto const value = intx::be::store<evmc_uint256be>(MIN_VALIDATE_STAKE);
+    auto const value = be_store_as<evmc_uint256be>(MIN_VALIDATE_STAKE);
     auto const [input, address] =
         craft_add_validator_input(0xababab_address, 2 * MIN_VALIDATE_STAKE);
     auto const res =
@@ -646,7 +661,7 @@ TEST_F(StakeLatest, add_validator_revert_msg_value_not_signed)
 
 TEST_F(StakeLatest, add_validator_revert_already_exists)
 {
-    auto const value = intx::be::store<evmc_uint256be>(MIN_VALIDATE_STAKE);
+    auto const value = be_store_as<evmc_uint256be>(MIN_VALIDATE_STAKE);
     auto const [input, address] =
         craft_add_validator_input(0xababab_address, MIN_VALIDATE_STAKE);
     EXPECT_FALSE(contract.precompile_add_validator<Trait>(input, address, value)
@@ -659,7 +674,7 @@ TEST_F(StakeLatest, add_validator_revert_already_exists)
 
 TEST_F(StakeLatest, add_validator_revert_minimum_stake_not_met)
 {
-    auto const value = intx::be::store<evmc_uint256be>(uint256_t{1});
+    auto const value = be_store_as<evmc_uint256be>(uint256_t{1});
     auto const [input, address] =
         craft_add_validator_input(0xababab_address, uint256_t{1});
     auto const res =
@@ -678,7 +693,7 @@ TEST_F(StakeLatest, nonpayable_functions_revert)
         StakingError::ValueNonZero);
 
     // precompiles
-    evmc_uint256be value = intx::be::store<evmc_uint256be>(5 * MON);
+    evmc_uint256be const value = be_store_as<evmc_uint256be>(5 * MON);
     EXPECT_EQ(
         contract.precompile_undelegate<Trait>({}, {}, value).assume_error(),
         StakingError::ValueNonZero);
@@ -731,7 +746,7 @@ TEST_F(StakeLatest, nonpayable_functions_revert)
 TEST_F(StakeLatest, auth_address_conflicts_with_linked_list)
 {
     // empty pointer
-    Address empty{};
+    Address const empty{};
     EXPECT_TRUE(add_validator(empty, ACTIVE_VALIDATOR_STAKE).has_error());
 
     // sentinel
@@ -1730,7 +1745,7 @@ TEST_F(StakeLatest, validator_removes_self)
         delegate(val.id, 0xabab_address, ACTIVE_VALIDATOR_STAKE).has_error());
     skip_to_next_epoch();
 
-    uint8_t withdrawal_id{1};
+    uint8_t const withdrawal_id{1};
     EXPECT_FALSE(
         undelegate(val.id, auth_address, withdrawal_id, MIN_VALIDATE_STAKE)
             .has_error());
@@ -1905,7 +1920,7 @@ TEST_F(StakeLatest, validator_joining_boundary_rewards)
     // nodes will not reward him, indicated by the BLOCK_AUTHOR_NOT_IN_SET
     // error code, producing a state root mismatch on that block.
     EXPECT_FALSE(syscall_snapshot().has_error());
-    unsigned DELAY_WINDOW = 6000;
+    unsigned const DELAY_WINDOW = 6000;
     for (unsigned i = 0; i < DELAY_WINDOW; ++i) {
         EXPECT_EQ(
             StakingError::NotInValidatorSet,
@@ -2018,7 +2033,7 @@ TEST_F(StakeLatest, validator_external_rewards_uniform_reward_pool)
     ASSERT_FALSE(res.has_error());
     auto const val = res.value();
 
-    std::array<Address, 5> delegators = {
+    std::array<Address, 5> const delegators = {
         auth_address,
         0xaaaa_address,
         0xbbbb_address,
@@ -2650,7 +2665,7 @@ TEST_F(StakeLatest, delegator_delegates_in_epoch_delay_period)
     // take snapshot and reward during the window. delegator *should not*
     // receive rewards.
     EXPECT_FALSE(syscall_snapshot().has_error());
-    unsigned DELAY_WINDOW = 6000;
+    unsigned const DELAY_WINDOW = 6000;
 
     for (unsigned i = 0; i < DELAY_WINDOW; ++i) {
         EXPECT_EQ(
@@ -4108,7 +4123,7 @@ TEST_F(StakeLatest, contract_bootstrap)
 TEST_F(StakeLatest, zero_reward_epochs)
 {
     auto const auth_address = 0xdeadbeef_address;
-    std::array<Address, 4> delegators{
+    std::array<Address, 4> const delegators{
         0xdead_address, 0xbeef_address, 0x600d_address, 0xbadd_address};
     std::vector<ValResult> validators;
     uint256_t const DELEGATOR_STAKE = 1000000 * MON;

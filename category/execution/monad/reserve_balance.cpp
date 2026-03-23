@@ -14,9 +14,11 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <category/core/assert.h>
+#include <category/core/byte_string.hpp>
 #include <category/core/bytes.hpp>
 #include <category/core/config.hpp>
 #include <category/core/int.hpp>
+#include <category/core/likely.h>
 #include <category/core/monad_exception.hpp>
 #include <category/execution/ethereum/chain/chain.hpp>
 #include <category/execution/ethereum/core/address.hpp>
@@ -35,8 +37,6 @@
 #include <category/vm/evm/traits.hpp>
 
 #include <ankerl/unordered_dense.h>
-
-#include <intx/intx.hpp>
 
 #include <algorithm>
 #include <cstddef>
@@ -192,7 +192,8 @@ bool ReserveBalance::subject_account(Address const &address)
         return false;
     }
 
-    OriginalAccountState &orig_state = state_->original_account_state(address);
+    OriginalAccountState const &orig_state =
+        state_->original_account_state(address);
     bytes32_t const effective_code_hash = use_recent_code_hash_
                                               ? state_->get_code_hash(address)
                                               : orig_state.get_code_hash();

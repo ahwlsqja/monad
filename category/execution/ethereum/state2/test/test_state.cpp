@@ -22,8 +22,8 @@
 #include <category/core/keccak.hpp>
 #include <category/execution/ethereum/core/account.hpp>
 #include <category/execution/ethereum/core/address.hpp>
-#include <category/execution/ethereum/core/fmt/bytes_fmt.hpp>
-#include <category/execution/ethereum/core/fmt/int_fmt.hpp>
+#include <category/execution/ethereum/core/fmt/bytes_fmt.hpp> // NOLINT(misc-include-cleaner)
+#include <category/execution/ethereum/core/fmt/int_fmt.hpp> // NOLINT(misc-include-cleaner)
 #include <category/execution/ethereum/db/db.hpp>
 #include <category/execution/ethereum/db/db_cache.hpp>
 #include <category/execution/ethereum/db/trie_db.hpp>
@@ -32,11 +32,9 @@
 #include <category/execution/ethereum/state2/state_deltas.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
 #include <category/mpt/db.hpp>
-#include <category/mpt/nibbles_view.hpp>
 #include <category/mpt/ondisk_db_config.hpp>
 #include <category/mpt/util.hpp>
 #include <category/vm/code.hpp>
-#include <category/vm/evm/traits.hpp>
 #include <category/vm/vm.hpp>
 #include <monad/test/traits_test.hpp>
 
@@ -1278,7 +1276,6 @@ TEST_F(InMemoryStateTest, commit_storage_and_account_together_regression)
 
 TEST_F(InMemoryStateTest, set_and_then_clear_storage_in_same_commit)
 {
-    using namespace intx;
     BlockState bs{this->tdb, this->vm};
     State as{bs, Incarnation{1, 1}};
 

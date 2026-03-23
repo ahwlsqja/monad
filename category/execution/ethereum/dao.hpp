@@ -15,17 +15,21 @@
 
 #pragma once
 
+#include <category/core/byte_string.hpp>
 #include <category/core/config.hpp>
 
 #include <category/execution/ethereum/core/address.hpp>
-#include <category/execution/ethereum/core/block.hpp>
 
-#include <intx/intx.hpp>
+#include <evmc/evmc.hpp> // NOLINT(misc-include-cleaner)
 
 MONAD_NAMESPACE_BEGIN
 
 namespace dao
 {
+
+    // Scoped to namespace dao to limit leakage to includers that pull in this
+    // namespace.
+    using evmc::literals::operator""_address;
 
     constexpr auto dao_block_number = 1'920'000u;
 

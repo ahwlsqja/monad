@@ -29,6 +29,7 @@
 #include <string>
 #include <sys/types.h>
 #include <tuple>
+#include <utility>
 #include <vector>
 
 using namespace monad::vm::runtime;
@@ -445,20 +446,20 @@ TEST(uint256, arithmetic)
                 auto [sqx, srx] = ::intx::sdivrem(to_intx(x), to_intx(y));
                 ASSERT_EQ(sq, from_intx(sqx));
                 ASSERT_EQ(sr, from_intx(srx));
-            }
 
-            for (auto const &z : test_inputs) {
-                if (z == 0) {
-                    continue;
+                for (auto const &z : test_inputs) {
+                    if (z == 0) {
+                        continue;
+                    }
+                    ASSERT_EQ(
+                        addmod(x, y, z),
+                        from_intx(::intx::addmod(
+                            to_intx(x), to_intx(y), to_intx(z))));
+                    ASSERT_EQ(
+                        mulmod(x, y, z),
+                        from_intx(::intx::mulmod(
+                            to_intx(x), to_intx(y), to_intx(z))));
                 }
-                ASSERT_EQ(
-                    addmod(x, y, z),
-                    from_intx(
-                        ::intx::addmod(to_intx(x), to_intx(y), to_intx(z))));
-                ASSERT_EQ(
-                    mulmod(x, y, z),
-                    from_intx(
-                        ::intx::mulmod(to_intx(x), to_intx(y), to_intx(z))));
             }
         }
         ASSERT_EQ(-x, from_intx(-(to_intx(x))));
@@ -499,8 +500,8 @@ TEST(uint256, multiplication)
         0xabcda1b2c3d41234};
     for (auto const &x : single_word_inputs) {
         for (auto const &y : single_word_inputs) {
-            auto const product_u128 = static_cast<uint128_t>(x) * y;
-            words_t<2> product{
+            auto const product_u128 = static_cast<unsigned __int128>(x) * y;
+            words_t<2> const product{
                 static_cast<uint64_t>(product_u128),
                 static_cast<uint64_t>(product_u128 >> 64)};
             check_truncating_mul<1, 1, 1>({x}, {y}, product);

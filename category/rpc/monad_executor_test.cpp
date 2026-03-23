@@ -71,8 +71,6 @@
 
 #include <gtest/gtest.h>
 
-#include <intx/intx.hpp>
-
 #include <nlohmann/json_fwd.hpp>
 
 #include <array>
@@ -1033,7 +1031,6 @@ TEST_F(EthCallFixture, expensive_read_out_of_gas)
 
 TEST_F(EthCallFixture, from_contract_account)
 {
-    using namespace intx;
 
     auto const code =
         0x6000600155600060025560006003556000600455600060055500_bytes;
@@ -1099,7 +1096,6 @@ TEST_F(EthCallFixture, from_contract_account)
 
 TEST_F(EthCallFixture, concurrent_eth_calls)
 {
-    using namespace intx;
 
     auto const ca = 0xaaaf5374fce5edbc8e2a8697c15331677e6ebf0b_address;
 
@@ -1343,8 +1339,8 @@ TEST_F(EthCallFixture, call_trace_with_logs)
                         {.data = {},
                          .topics =
                              {
-                                 intx::be::store<bytes32_t, uint256_t>(2),
-                                 intx::be::store<bytes32_t, uint256_t>(1),
+                                 be_store_as<bytes32_t, uint256_t>(2),
+                                 be_store_as<bytes32_t, uint256_t>(1),
                              },
                          .address = a_address},
                     .position = 0,
@@ -1354,7 +1350,7 @@ TEST_F(EthCallFixture, call_trace_with_logs)
                         {.data = {},
                          .topics =
                              {
-                                 intx::be::store<bytes32_t, uint256_t>(3),
+                                 be_store_as<bytes32_t, uint256_t>(3),
                              },
                          .address = a_address},
                     .position = 2,
@@ -1410,9 +1406,9 @@ TEST_F(EthCallFixture, call_trace_with_logs)
         .depth = 1,
         .logs = std::vector{CallFrame::Log{
             .log =
-                {.data = byte_string{intx::be::store<bytes32_t>(
+                {.data = byte_string{be_store_as<bytes32_t>(
                      std::numeric_limits<uint256_t>::max() - 1)},
-                 .topics = {intx::be::store<bytes32_t, uint256_t>(1)},
+                 .topics = {be_store_as<bytes32_t, uint256_t>(1)},
                  .address = c_address},
             .position = 0,
         }},

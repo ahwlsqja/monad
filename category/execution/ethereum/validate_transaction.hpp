@@ -32,8 +32,12 @@
 #include <boost/outcome/config.hpp>
 #include <boost/outcome/success_failure.hpp>
 
+#include <category/core/likely.h>
+
 #include <initializer_list>
+#include <limits>
 #include <optional>
+#include <span>
 
 MONAD_NAMESPACE_BEGIN
 
@@ -49,15 +53,36 @@ Result<void> validate_transaction(
     std::span<std::optional<Address> const> const authorities);
 
 template <Traits traits>
-[[gnu::always_inline]] inline Result<void> validate_ethereum_transaction(
-    Transaction const &tx, Address const &sender, State &state)
+[[gnu::always_inline]] inline Result<void>
+validate_transaction(Transaction const &tx, Address const &sender, State &state)
 {
     using BOOST_OUTCOME_V2_NAMESPACE::success;
 
-    // YP (70)
-    uint512_t v0 = tx.value + max_gas_cost(tx.gas_limit, tx.max_fee_per_gas);
+    // YP (70): total cost = value + gas_cost (+ blob_fee).
+    // If gas_limit * max_fee_per_gas overflows uint256, no balance can cover
+    // it — return InsufficientBalance. Also guard value + gas_cost overflow.
+    if (MONAD_UNLIKELY(
+            tx.max_fee_per_gas != 0 &&
+            uint256_t{tx.gas_limit} > UINT256_MAX / tx.max_fee_per_gas)) {
+        return TransactionError::InsufficientBalance;
+    }
+    uint256_t const gas_cost = max_gas_cost(tx.gas_limit, tx.max_fee_per_gas);
+    if (MONAD_UNLIKELY(tx.value > UINT256_MAX - gas_cost)) {
+        return TransactionError::InsufficientBalance;
+    }
+    uint256_t v0 = tx.value + gas_cost;
     if (tx.type == TransactionType::eip4844) {
-        v0 += tx.max_fee_per_blob_gas * get_total_blob_gas(tx);
+        uint64_t const total_blob_gas = get_total_blob_gas(tx);
+        if (MONAD_UNLIKELY(
+                total_blob_gas != 0 &&
+                tx.max_fee_per_blob_gas > UINT256_MAX / total_blob_gas)) {
+            return TransactionError::InsufficientBalance;
+        }
+        uint256_t const blob_cost = tx.max_fee_per_blob_gas * total_blob_gas;
+        if (MONAD_UNLIKELY(blob_cost > UINT256_MAX - v0)) {
+            return TransactionError::InsufficientBalance;
+        }
+        v0 += blob_cost;
     }
 
     if (MONAD_UNLIKELY(!state.account_exists(sender))) {
@@ -73,7 +98,9 @@ template <Traits traits>
     }
 
     // YP (71)
+    // NOLINTBEGIN(misc-const-correctness)
     bool sender_is_eoa = state.get_code_hash(sender) == NULL_HASH;
+    // NOLINTEND(misc-const-correctness)
     if constexpr (traits::evm_rev() >= EVMC_PRAGUE) {
         // EIP-7702
         auto const icode = state.get_code(sender)->intercode();
@@ -103,6 +130,13 @@ template <Traits traits>
     // (It requires knowing the parent block)
 
     return success();
+}
+
+template <Traits traits>
+[[gnu::always_inline]] inline Result<void> validate_ethereum_transaction(
+    Transaction const &tx, Address const &sender, State &state)
+{
+    return validate_transaction<traits>(tx, sender, state);
 }
 
 MONAD_NAMESPACE_END

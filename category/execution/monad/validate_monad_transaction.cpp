@@ -58,7 +58,27 @@ Result<void> validate_transaction(
     return outcome::success();
 }
 
-EXPLICIT_MONAD_TRAITS(validate_transaction);
+// EXPLICIT_MONAD_TRAITS cannot be used here because validate_transaction has
+// two overloads (3-param inline and 5-param). Specify full signature.
+#define EXPLICIT_VALIDATE_TX_5_MONAD(T)                                        \
+    template Result<void> validate_transaction<T>(                             \
+        Transaction const &,                                                   \
+        Address const &,                                                       \
+        State &,                                                               \
+        uint256_t const &,                                                     \
+        std::span<std::optional<Address> const>)
+EXPLICIT_VALIDATE_TX_5_MONAD(::monad::MonadTraits<MONAD_ZERO>);
+EXPLICIT_VALIDATE_TX_5_MONAD(::monad::MonadTraits<MONAD_ONE>);
+EXPLICIT_VALIDATE_TX_5_MONAD(::monad::MonadTraits<MONAD_TWO>);
+EXPLICIT_VALIDATE_TX_5_MONAD(::monad::MonadTraits<MONAD_THREE>);
+EXPLICIT_VALIDATE_TX_5_MONAD(::monad::MonadTraits<MONAD_FOUR>);
+EXPLICIT_VALIDATE_TX_5_MONAD(::monad::MonadTraits<MONAD_FIVE>);
+EXPLICIT_VALIDATE_TX_5_MONAD(::monad::MonadTraits<MONAD_SIX>);
+EXPLICIT_VALIDATE_TX_5_MONAD(::monad::MonadTraits<MONAD_SEVEN>);
+EXPLICIT_VALIDATE_TX_5_MONAD(::monad::MonadTraits<MONAD_EIGHT>);
+EXPLICIT_VALIDATE_TX_5_MONAD(::monad::MonadTraits<MONAD_NINE>);
+EXPLICIT_VALIDATE_TX_5_MONAD(::monad::MonadTraits<MONAD_NEXT>);
+#undef EXPLICIT_VALIDATE_TX_5_MONAD
 
 MONAD_NAMESPACE_END
 

@@ -16,7 +16,12 @@
 #include <boost/fiber/future/promise.hpp>
 #include <boost/outcome/try.hpp>
 #include <category/core/assert.h>
+#include <category/core/byte_string.hpp>
+#include <category/core/int.hpp>
+#include <category/core/likely.h>
+#include <category/core/result.hpp>
 #include <category/execution/ethereum/chain/chain.hpp>
+#include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/contract/abi_signatures.hpp>
 #include <category/execution/ethereum/core/transaction.hpp>
 #include <category/execution/ethereum/event/record_txn_events.hpp>
@@ -25,6 +30,7 @@
 #include <category/execution/ethereum/state3/state.hpp>
 #include <category/execution/ethereum/trace/call_tracer.hpp>
 #include <category/execution/ethereum/trace/event_trace.hpp>
+#include <category/execution/ethereum/trace/state_tracer.hpp>
 #include <category/execution/ethereum/validate_transaction.hpp>
 #include <category/execution/monad/execute_system_transaction.hpp>
 #include <category/execution/monad/staking/staking_contract.hpp>
@@ -33,12 +39,15 @@
 #include <category/execution/monad/validate_system_transaction.hpp>
 #include <category/vm/evm/explicit_traits.hpp>
 #include <category/vm/evm/traits.hpp>
+#include <evmc/evmc.h>
+
+#include <cstdint>
 
 #include <optional>
 
-MONAD_ANONYMOUS_NAMESPACE_BEGIN
+MONAD_ANONYMOUS_NAMESPACE_BEGIN // NOLINT(misc-include-cleaner)
 
-struct SyscallSelector
+    struct SyscallSelector
 {
     static constexpr uint32_t REWARD =
         abi_encode_selector("syscallReward(address)");
@@ -52,11 +61,11 @@ static_assert(SyscallSelector::REWARD == 0x791bdcf3);
 static_assert(SyscallSelector::SNAPSHOT == 0x157eeb21);
 static_assert(SyscallSelector::ON_EPOCH_CHANGE == 0x1d4e9f02);
 
-MONAD_ANONYMOUS_NAMESPACE_END
+MONAD_ANONYMOUS_NAMESPACE_END // NOLINT(misc-include-cleaner)
 
-MONAD_NAMESPACE_BEGIN
+    MONAD_NAMESPACE_BEGIN // NOLINT(misc-include-cleaner)
 
-using BOOST_OUTCOME_V2_NAMESPACE::success;
+    using BOOST_OUTCOME_V2_NAMESPACE::success;
 
 template <Traits traits>
 ExecuteSystemTransaction<traits>::ExecuteSystemTransaction(
@@ -169,7 +178,7 @@ evmc_message ExecuteSystemTransaction<traits>::to_message() const
         .memory = nullptr,
         .memory_capacity = 0,
     };
-    intx::be::store(msg.value.bytes, tx_.value);
+    be_store(msg.value.bytes, tx_.value);
     return msg;
 }
 
@@ -196,7 +205,7 @@ Receipt ExecuteSystemTransaction<traits>::execute_final(State &state)
     // always return success because these transactions can't revert.
     Receipt receipt{.status = 1u, .gas_used = 0, .type = tx_.type};
     for (auto const &log : state.logs()) {
-        receipt.add_log(std::move(log));
+        receipt.add_log(log);
     }
     call_tracer_.on_finish(receipt.gas_used);
     trace::run_tracer<traits>(state_tracer_, state);
@@ -220,8 +229,9 @@ Result<void> ExecuteSystemTransaction<traits>::execute_staking_syscall(
         return staking::StakingError::InvalidInput;
     }
 
-    auto const signature =
-        intx::be::unsafe::load<uint32_t>(calldata.substr(0, 4).data());
+    auto const signature = be_load<uint32_t>(
+        calldata.substr(0, 4)
+            .data()); // NOLINT(bugprone-suspicious-stringview-data-usage)
     calldata.remove_prefix(4);
 
     switch (signature) {
@@ -231,10 +241,11 @@ Result<void> ExecuteSystemTransaction<traits>::execute_staking_syscall(
         return contract.syscall_snapshot(calldata, value);
     case SyscallSelector::ON_EPOCH_CHANGE:
         return contract.syscall_on_epoch_change(calldata, value);
+    default:
+        return staking::StakingError::MethodNotSupported;
     }
-    return staking::StakingError::MethodNotSupported;
 }
 
 EXPLICIT_MONAD_TRAITS_CLASS(ExecuteSystemTransaction);
 
-MONAD_NAMESPACE_END
+MONAD_NAMESPACE_END // NOLINT(misc-include-cleaner)

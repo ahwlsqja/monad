@@ -13,12 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <category/core/assert.h>
 #include <category/core/bytes.hpp>
 #include <category/core/config.hpp>
 #include <category/core/int.hpp>
 #include <category/core/likely.h>
 #include <category/core/result.hpp>
-#include <category/execution/ethereum/core/account.hpp>
 #include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/transaction.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
@@ -30,13 +30,13 @@
 
 #include <evmc/evmc.h>
 
-#include <intx/intx.hpp>
-
 #include <boost/outcome/config.hpp>
 #include <boost/outcome/success_failure.hpp>
 
+#include <intx/intx.hpp>
 #include <silkpre/secp256k1n.hpp>
 
+#include <bit>
 #include <cstdint>
 #include <initializer_list>
 #include <limits>
@@ -162,16 +162,23 @@ Result<void> static_validate_transaction(
         return TransactionError::NonceExceedsMax;
     }
 
-    // EIP-1559
+    // EIP-1559: check gas_limit * max_fee_per_gas doesn't overflow uint256
     if (MONAD_UNLIKELY(
-            max_gas_cost(tx.gas_limit, tx.max_fee_per_gas) >
-            std::numeric_limits<uint256_t>::max())) {
+            tx.max_fee_per_gas != 0 &&
+            uint256_t{tx.gas_limit} > UINT256_MAX / tx.max_fee_per_gas)) {
         return TransactionError::GasLimitOverflow;
     }
 
+    // silkpre expects intx::uint256; verify layout matches monad::uint256_t
+    static_assert(sizeof(uint256_t) == sizeof(intx::uint256));
+    static_assert(alignof(uint256_t) == alignof(intx::uint256));
+    static_assert(std::is_trivially_copyable_v<uint256_t>);
+    static_assert(std::is_trivially_copyable_v<intx::uint256>);
     // EIP-2
     if (MONAD_UNLIKELY(!silkpre::is_valid_signature(
-            tx.sc.r, tx.sc.s, traits::evm_rev() >= EVMC_HOMESTEAD))) {
+            std::bit_cast<intx::uint256>(tx.sc.r),
+            std::bit_cast<intx::uint256>(tx.sc.s),
+            traits::evm_rev() >= EVMC_HOMESTEAD))) {
         return TransactionError::InvalidSignature;
     }
 
@@ -211,6 +218,31 @@ Result<void> validate_transaction(
     return validate_ethereum_transaction<traits>(tx, sender, state);
 }
 
-EXPLICIT_EVM_TRAITS(validate_transaction);
+// EXPLICIT_EVM_TRAITS cannot be used here because validate_transaction has two
+// overloads (3-param inline and 5-param). Explicit instantiation requires the
+// full signature to disambiguate.
+#define EXPLICIT_VALIDATE_TX_5(T)                                              \
+    template Result<void> validate_transaction<T>(                             \
+        Transaction const &,                                                   \
+        Address const &,                                                       \
+        State &,                                                               \
+        uint256_t const &,                                                     \
+        std::span<std::optional<Address> const>)
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_FRONTIER>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_HOMESTEAD>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_TANGERINE_WHISTLE>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_SPURIOUS_DRAGON>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_BYZANTIUM>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_CONSTANTINOPLE>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_PETERSBURG>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_ISTANBUL>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_BERLIN>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_LONDON>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_PARIS>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_SHANGHAI>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_CANCUN>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_PRAGUE>);
+EXPLICIT_VALIDATE_TX_5(::monad::EvmTraits<EVMC_OSAKA>);
+#undef EXPLICIT_VALIDATE_TX_5
 
 MONAD_NAMESPACE_END

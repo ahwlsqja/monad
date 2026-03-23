@@ -13,11 +13,32 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <category/core/assert.h>
+#include <category/core/byte_string.hpp>
+#include <category/core/int.hpp>
+#include <category/core/unaligned.hpp>
 #include <category/execution/monad/staking/fuzzer/staking_contract_machine.hpp>
 #include <category/execution/monad/staking/test/input_generation.hpp>
 #include <category/execution/monad/staking/util/bls.hpp>
+#include <category/execution/monad/staking/util/constants.hpp>
 #include <category/execution/monad/staking/util/secp256k1.hpp>
 #include <category/vm/evm/explicit_traits.hpp>
+#include <category/vm/evm/traits.hpp>
+#include <category/vm/fuzzing/generator/choice.hpp>
+#include <evmc/evmc.h>
+#include <evmc/evmc.hpp>
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <iostream>
+#include <optional>
+#include <tuple>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 #include <algorithm>
 
@@ -31,7 +52,7 @@ namespace
     byte_string_view
     consume_bytes(byte_string_view &data, size_t const num_bytes)
     {
-        byte_string_view ret = data.substr(0, num_bytes);
+        byte_string_view const ret = data.substr(0, num_bytes);
         data.remove_prefix(num_bytes);
         return ret;
     }
@@ -149,7 +170,7 @@ namespace monad::staking::test
         // pairwise distinct elements:
         MONAD_ASSERT(valset_execution.size() == valset_execution_length);
 
-        for (uint64_t v : valset_execution) {
+        for (uint64_t const v : valset_execution) {
             MONAD_ASSERT(model_.val_execution(v).auth_address() != Address{});
         }
 
@@ -163,7 +184,7 @@ namespace monad::staking::test
 
         MONAD_ASSERT(valset_snapshot_length <= ACTIVE_VALSET_SIZE);
 
-        for (uint64_t v : valset_consensus) {
+        for (uint64_t const v : valset_consensus) {
             MONAD_ASSERT(valset_execution.contains(v));
         }
 
@@ -613,7 +634,7 @@ namespace monad::staking::test
     void StakingContractMachine<traits>::for_all_val_ids(
         std::function<void(u64_be)> f)
     {
-        uint64_t n = model_.last_val_id() + 3;
+        uint64_t const n = model_.last_val_id() + 3;
         for (uint64_t i = 0; i < n; ++i) {
             f(i);
         }
@@ -731,7 +752,7 @@ namespace monad::staking::test
     {
         auto const x = gen_uint256();
         Address a;
-        std::memcpy(a.bytes, intx::as_bytes(x), sizeof(a.bytes));
+        std::memcpy(a.bytes, as_bytes(x), sizeof(a.bytes));
         all_addresses_.push_back(a);
         return a;
     }
@@ -1133,10 +1154,10 @@ namespace monad::staking::test
 
         Address const sender = gen_new_or_old_address();
         uint256_t const stake = gen_stake(min_stake, max_stake);
-        auto const value = intx::be::store<evmc_uint256be>(stake);
+        auto const value = be_store_as<evmc_uint256be>(stake);
         Address const auth_address = gen_new_or_old_address();
         auto const commission = gen_bound_biased_uint256(0, MAX_COMMISSION);
-        auto const secret = intx::be::store<evmc::bytes32>(gen_uint256());
+        auto const secret = be_store_as<evmc::bytes32>(gen_uint256());
 
         auto [msg, secp, bls, signer] = craft_add_validator_input_raw(
             auth_address, stake, commission, secret);
@@ -1157,7 +1178,7 @@ namespace monad::staking::test
         auto const val_id = result.value();
 
         all_val_ids_.push_back(val_id);
-        if (intx::be::load<uint256_t>(value.bytes) <= MAX_DELEGABLE_STAKE) {
+        if (uint256_t::be_load(value.bytes) <= MAX_DELEGABLE_STAKE) {
             MONAD_ASSERT(model_.val_execution(val_id).exists());
             auto const ins = delegable_val_ids_.insert(val_id.native());
             MONAD_ASSERT(ins);
@@ -1190,7 +1211,7 @@ namespace monad::staking::test
 
         auto const balance_after = model_.balance_of(STAKING_CA);
 
-        auto const stake = intx::be::load<uint256_t>(value);
+        auto const stake = uint256_t::be_load(value);
 
         MONAD_ASSERT(balance_after - balance_before == stake);
 
@@ -1199,18 +1220,23 @@ namespace monad::staking::test
         MONAD_ASSERT(last_val_id_after == last_val_id_before + 1);
 
         byte_string_view reader{msg};
-        auto const secp_pubkey_compressed =
-            unaligned_load<byte_string_fixed<33>>(
-                consume_bytes(reader, 33).data());
-        auto const bls_pubkey_compressed =
-            unaligned_load<byte_string_fixed<48>>(
-                consume_bytes(reader, 48).data());
+        auto const secp_pubkey_compressed = unaligned_load<
+            byte_string_fixed<33>>(
+            consume_bytes(reader, 33)
+                .data()); // NOLINT(bugprone-suspicious-stringview-data-usage)
+        auto const bls_pubkey_compressed = unaligned_load<
+            byte_string_fixed<48>>(
+            consume_bytes(reader, 48)
+                .data()); // NOLINT(bugprone-suspicious-stringview-data-usage)
         auto const auth_address = unaligned_load<Address>(
-            consume_bytes(reader, sizeof(Address)).data());
+            consume_bytes(reader, sizeof(Address))
+                .data()); // NOLINT(bugprone-suspicious-stringview-data-usage)
         auto const signed_stake = unaligned_load<evmc_uint256be>(
-            consume_bytes(reader, sizeof(evmc_uint256be)).data());
+            consume_bytes(reader, sizeof(evmc_uint256be))
+                .data()); // NOLINT(bugprone-suspicious-stringview-data-usage)
         auto const commission = unaligned_load<u256_be>(
-            consume_bytes(reader, sizeof(u256_be)).data());
+            consume_bytes(reader, sizeof(u256_be))
+                .data()); // NOLINT(bugprone-suspicious-stringview-data-usage)
 
         (void)signed_stake;
 
@@ -1271,7 +1297,7 @@ namespace monad::staking::test
                 MONAD_ASSERT(val_stake <= MAX_DELEGABLE_STAKE);
                 auto const del_stake =
                     gen_stake(MIN_DELEGATE_STAKE, MAX_STAKE - val_stake);
-                auto const value = intx::be::store<evmc_uint256be>(del_stake);
+                auto const value = be_store_as<evmc_uint256be>(del_stake);
                 return {val_id, sender, value};
             },
             Choice(0.01, [&, this](auto &) -> R {
@@ -1286,7 +1312,7 @@ namespace monad::staking::test
         auto result = model_.precompile_delegate<traits>(val_id, sender, value);
         MONAD_ASSERT(result.has_value());
 
-        if (intx::be::load<uint256_t>(value) == 0) {
+        if (uint256_t::be_load(value) == 0) {
             return;
         }
 
@@ -1330,7 +1356,7 @@ namespace monad::staking::test
 
         auto const balance_after = model_.balance_of(STAKING_CA);
 
-        auto const stake = intx::be::load<uint256_t>(value);
+        auto const stake = uint256_t::be_load(value);
 
         if (!stake) {
             return;
@@ -1920,7 +1946,7 @@ namespace monad::staking::test
             auto const sender = gen_new_or_old_address();
             auto const reward = gen_bound_biased_uint256(
                 MIN_EXTERNAL_REWARD, MAX_EXTERNAL_REWARD);
-            auto const value = intx::be::store<evmc_uint256be>(reward);
+            auto const value = be_store_as<evmc_uint256be>(reward);
             return {{*val_id, sender, value}};
         }
         return std::nullopt;
@@ -1944,7 +1970,7 @@ namespace monad::staking::test
         }
         auto const [val_id, sender, value] = *input;
 
-        auto const reward = intx::be::load<uint256_t>(value);
+        auto const reward = uint256_t::be_load(value);
 
         auto const error_bound_before = model_.error_bound();
 

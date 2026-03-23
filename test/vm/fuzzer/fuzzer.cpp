@@ -35,12 +35,13 @@
 
 #include <evmone/constants.hpp>
 #include <evmone/evmone.h>
+#include <intx/intx.hpp>
 
 #include <evmc/evmc.h>
 #include <evmc/evmc.hpp>
 
 #include <CLI/CLI.hpp>
-#include <intx/intx.hpp>
+#include <category/core/int.hpp>
 
 #include <algorithm>
 #include <array>
@@ -125,10 +126,10 @@ static evmone::test::TestState initial_state()
     auto init = evmone::test::TestState{};
     // Genesis account with some large balance, but sufficiently small
     // so that token supply will not overflow uint256.
-    init[genesis_address] = {
-        .balance = std::numeric_limits<intx::uint256>::max() / 2,
-        .storage = {},
-        .code = {}};
+    // TestAccount::balance is intx::uint256 at the evmone boundary (external
+    // library);
+    init[genesis_address] = evmone::test::TestAccount{
+        .balance = ~intx::uint256{0} / 2, .storage = {}, .code = {}};
     return init;
 }
 

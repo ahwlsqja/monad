@@ -13,19 +13,33 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <category/async/config.hpp>
+#include <category/async/util.hpp>
+#include <category/core/assert.h>
+#include <category/core/bytes.hpp>
+#include <category/core/int.hpp>
+#include <category/core/runtime/uint256.hpp>
 #include <category/execution/ethereum/core/contract/big_endian.hpp>
+#include <category/execution/ethereum/db/trie_db.hpp>
 #include <category/execution/ethereum/db/util.hpp>
 #include <category/execution/ethereum/state2/block_state.hpp>
-#include <category/execution/ethereum/state2/state_deltas.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
+#include <category/execution/ethereum/trace/call_tracer.hpp>
 #include <category/execution/monad/staking/read_valset.hpp>
 #include <category/execution/monad/staking/staking_contract.hpp>
-#include <category/mpt/ondisk_db_config.hpp>
+#include <category/execution/monad/staking/util/constants.hpp>
+#include <category/vm/vm.hpp>
 
-#include <test_resource_data.h>
-#include <utility>
+#include <filesystem>
+
+#include <category/mpt/db.hpp>
+#include <category/mpt/ondisk_db_config.hpp>
+#include <stdlib.h>
+#include <unistd.h>
 
 #include <gtest/gtest.h>
+
+#include <cstdint>
 
 using namespace monad;
 using namespace monad::staking;
@@ -134,7 +148,7 @@ TEST_F(ReadValsetBeforeBoundary, get_this_epoch_valset)
     ASSERT_TRUE(set.has_value());
     EXPECT_EQ(set.value().size(), CONSENSUS_VALSET_LENGTH);
     for (auto const &validator : set.value()) {
-        EXPECT_EQ(intx::be::load<uint256_t>(validator.stake), CONSENSUS_STAKE);
+        EXPECT_EQ(uint256_t::be_load(validator.stake), CONSENSUS_STAKE);
     }
 }
 
@@ -172,7 +186,7 @@ TEST_F(ReadValsetAfterBoundary, get_this_epoch_valset)
     ASSERT_TRUE(set.has_value());
     EXPECT_EQ(set.value().size(), SNAPSHOT_VALSET_LENGTH);
     for (auto const &validator : set.value()) {
-        EXPECT_EQ(intx::be::load<uint256_t>(validator.stake), SNAPSHOT_STAKE);
+        EXPECT_EQ(uint256_t::be_load(validator.stake), SNAPSHOT_STAKE);
     }
 }
 
@@ -184,7 +198,7 @@ TEST_F(ReadValsetAfterBoundary, get_next_epoch_valset)
     ASSERT_TRUE(set.has_value());
     EXPECT_EQ(set.value().size(), CONSENSUS_VALSET_LENGTH);
     for (auto const &validator : set.value()) {
-        EXPECT_EQ(intx::be::load<uint256_t>(validator.stake), CONSENSUS_STAKE);
+        EXPECT_EQ(uint256_t::be_load(validator.stake), CONSENSUS_STAKE);
     }
 }
 

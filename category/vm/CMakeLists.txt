@@ -51,7 +51,6 @@ target_include_directories(monad-vm
 
 target_link_libraries(monad-vm
     PUBLIC TBB::tbb
-    PUBLIC intx::intx
     PUBLIC evmc::evmc
     PUBLIC asmjit::asmjit
     PUBLIC quill::quill

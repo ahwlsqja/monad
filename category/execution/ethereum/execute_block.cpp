@@ -14,9 +14,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <category/core/assert.h>
+#include <category/core/bytes.hpp>
 #include <category/core/config.hpp>
-#include <category/core/cpu_relax.h>
-#include <category/core/event/event_recorder.h>
 #include <category/core/fiber/fiber_group.hpp>
 #include <category/core/fiber/priority_pool.hpp>
 #include <category/core/int.hpp>
@@ -26,8 +25,9 @@
 #include <category/execution/ethereum/block_hash_history.hpp>
 #include <category/execution/ethereum/block_reward.hpp>
 #include <category/execution/ethereum/chain/chain.hpp>
+#include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/block.hpp>
-#include <category/execution/ethereum/core/fmt/transaction_fmt.hpp>
+#include <category/execution/ethereum/core/fmt/transaction_fmt.hpp> // NOLINT(misc-include-cleaner)
 #include <category/execution/ethereum/core/receipt.hpp>
 #include <category/execution/ethereum/core/transaction.hpp>
 #include <category/execution/ethereum/core/withdrawal.hpp>
@@ -43,27 +43,30 @@
 #include <category/execution/ethereum/state3/state.hpp>
 #include <category/execution/ethereum/trace/call_tracer.hpp>
 #include <category/execution/ethereum/trace/event_trace.hpp>
+#include <category/execution/ethereum/trace/state_tracer.hpp>
 #include <category/execution/ethereum/validate_block.hpp>
 #include <category/execution/monad/staking/execute_block_prelude.hpp>
 #include <category/vm/evm/explicit_traits.hpp>
-#include <category/vm/evm/switch_traits.hpp>
 #include <category/vm/evm/traits.hpp>
 
 #include <boost/fiber/future/promise.hpp>
 #include <boost/outcome/try.hpp>
 #include <evmc/evmc.h>
-#include <intx/intx.hpp>
+#include <evmc/evmc.hpp>
 
-#include <atomic>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <optional>
+#include <span>
 #include <utility>
 #include <vector>
 
 MONAD_ANONYMOUS_NAMESPACE_BEGIN
+
+using evmc::literals::operator""_address;
 
 // EIP-4895
 void process_withdrawal(
@@ -95,10 +98,10 @@ void set_beacon_root(State &state, BlockHeader const &header)
     constexpr uint256_t HISTORY_BUFFER_LENGTH{8191};
 
     if (state.account_exists(BEACON_ROOTS_ADDRESS)) {
-        uint256_t timestamp{header.timestamp};
-        bytes32_t k1{
+        uint256_t const timestamp{header.timestamp};
+        bytes32_t const k1{
             to_bytes(to_big_endian(timestamp % HISTORY_BUFFER_LENGTH))};
-        bytes32_t k2{to_bytes(to_big_endian(
+        bytes32_t const k2{to_bytes(to_big_endian(
             timestamp % HISTORY_BUFFER_LENGTH + HISTORY_BUFFER_LENGTH))};
         state.set_storage(
             BEACON_ROOTS_ADDRESS, k1, to_bytes(to_big_endian(timestamp)));
@@ -117,7 +120,7 @@ std::vector<std::optional<Address>> recover_senders(
 {
     std::vector<std::optional<Address>> senders{transactions.size()};
 
-    std::shared_ptr<boost::fibers::promise<void>[]> promises{
+    std::shared_ptr<boost::fibers::promise<void>[]> const promises{
         new boost::fibers::promise<void>[transactions.size()]};
 
     for (unsigned i = 0; i < transactions.size(); ++i) {
@@ -226,7 +229,7 @@ Result<std::vector<Receipt>> execute_block_transactions(
     MONAD_ASSERT(senders.size() == call_tracers.size());
     MONAD_ASSERT(senders.size() == state_tracers.size());
 
-    std::shared_ptr<boost::fibers::promise<void>[]> promises{
+    std::shared_ptr<boost::fibers::promise<void>[]> const promises{
         new boost::fibers::promise<void>[transactions.size() + 1]};
     promises[0].set_value();
 

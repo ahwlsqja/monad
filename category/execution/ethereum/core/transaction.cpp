@@ -15,17 +15,15 @@
 
 #include <category/core/byte_string.hpp>
 #include <category/core/config.hpp>
+#include <category/core/int.hpp>
 #include <category/core/keccak.hpp>
 #include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/rlp/transaction_rlp.hpp>
+#include <category/execution/ethereum/core/signature.hpp>
 #include <category/execution/ethereum/core/transaction.hpp>
 #include <category/execution/ethereum/trace/event_trace.hpp>
 
 #include <silkpre/ecdsa.h>
-
-#include <ethash/hash_types.hpp>
-
-#include <intx/intx.hpp>
 
 #include <secp256k1.h>
 
@@ -66,8 +64,8 @@ std::optional<Address> ecrecover(
     auto const encoding_hash = keccak256(encoding);
 
     uint8_t signature[sizeof(sc.r) * 2];
-    intx::be::unsafe::store(signature, sc.r);
-    intx::be::unsafe::store(signature + sizeof(sc.r), sc.s);
+    be_store(signature, sc.r);
+    be_store(signature + sizeof(sc.r), sc.s);
 
     thread_local std::unique_ptr<
         secp256k1_context,

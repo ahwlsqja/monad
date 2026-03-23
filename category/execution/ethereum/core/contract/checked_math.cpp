@@ -15,6 +15,13 @@
 
 #include <category/execution/ethereum/core/contract/checked_math.hpp>
 
+#include <category/core/config.hpp>
+#include <category/core/int.hpp>
+#include <category/core/likely.h>
+#include <category/core/result.hpp>
+
+#include <initializer_list>
+
 #include <boost/outcome/config.hpp>
 // TODO unstable paths between versions
 #if __has_include(<boost/outcome/experimental/status-code/status-code/config.hpp>)
@@ -29,29 +36,27 @@ MONAD_NAMESPACE_BEGIN
 
 Result<uint256_t> checked_add(uint256_t const &x, uint256_t const &y)
 {
-    auto const res = intx::addc(x, y);
-    if (MONAD_UNLIKELY(res.carry)) {
+    uint256_t const sum = x + y;
+    if (MONAD_UNLIKELY(sum < x)) {
         return MathError::Overflow;
     }
-    return res.value;
+    return sum;
 }
 
 Result<uint256_t> checked_sub(uint256_t const &x, uint256_t const &y)
 {
-    auto const res = intx::subc(x, y);
-    if (MONAD_UNLIKELY(res.carry)) {
+    if (MONAD_UNLIKELY(y > x)) {
         return MathError::Underflow;
     }
-    return res.value;
+    return x - y;
 }
 
 Result<uint256_t> checked_mul(uint256_t const &x, uint256_t const &y)
 {
-    uint512_t const z = intx::umul(x, y);
-    if (MONAD_UNLIKELY((z > UINT256_MAX))) {
+    if (MONAD_UNLIKELY(x != 0 && y > UINT256_MAX / x)) {
         return MathError::Overflow;
     }
-    return static_cast<uint256_t>(z);
+    return x * y;
 }
 
 Result<uint256_t> checked_div(uint256_t const &x, uint256_t const &y)

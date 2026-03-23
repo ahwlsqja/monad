@@ -387,10 +387,7 @@ namespace monad::staking::test
                                : contract_.vars.epoch.load().native() + 1;
 
         add_delegator_stake(
-            val_id.native(),
-            addr,
-            epoch,
-            intx::be::load<uint256_t>(value.bytes));
+            val_id.native(), addr, epoch, uint256_t::be_load(value.bytes));
 
         val_id_to_historic_delegators_[val_id.native()].insert(addr);
 
@@ -416,10 +413,7 @@ namespace monad::staking::test
                                : contract_.vars.epoch.load().native() + 1;
 
         add_delegator_stake(
-            val_id.native(),
-            sender,
-            epoch,
-            intx::be::load<uint256_t>(value.bytes));
+            val_id.native(), sender, epoch, uint256_t::be_load(value.bytes));
 
         val_id_to_historic_delegators_[val_id.native()].insert(sender);
 
@@ -580,7 +574,7 @@ namespace monad::staking::test
         auto const input = encoder.encode_final();
         auto res = dispatch<traits>(input, sender, value);
         if (res.has_value()) {
-            auto const rew = intx::be::load<uint256_t>(value.bytes);
+            auto const rew = uint256_t::be_load(value.bytes);
             distribute_reward(val_id, u256_be{rew});
             error_bound_ += 1;
         }
@@ -674,8 +668,7 @@ namespace monad::staking::test
     void StakingContractModel::pre_call(evmc_uint256be const &value)
     {
         state_.push();
-        state_.add_to_balance(
-            STAKING_CA, intx::be::load<uint256_t>(value.bytes));
+        state_.add_to_balance(STAKING_CA, uint256_t::be_load(value.bytes));
     }
 
     template <typename T>

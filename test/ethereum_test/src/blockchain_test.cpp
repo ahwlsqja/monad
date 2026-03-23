@@ -30,14 +30,18 @@
 #include <category/core/keccak.hpp>
 #include <category/core/result.hpp>
 #include <category/execution/ethereum/block_hash_buffer.hpp>
+#include <category/execution/ethereum/chain/chain.hpp>
 #include <category/execution/ethereum/chain/ethereum_mainnet.hpp>
+#include <category/execution/ethereum/chain/genesis_state.hpp>
 #include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/block.hpp>
-#include <category/execution/ethereum/core/fmt/bytes_fmt.hpp>
+#include <category/execution/ethereum/core/fmt/bytes_fmt.hpp> // NOLINT(misc-include-cleaner)
 #include <category/execution/ethereum/core/receipt.hpp>
 #include <category/execution/ethereum/core/rlp/block_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/int_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/transaction_rlp.hpp>
+#include <category/execution/ethereum/core/withdrawal.hpp>
+#include <category/execution/ethereum/db/trie_db.hpp>
 #include <category/execution/ethereum/db/util.hpp>
 #include <category/execution/ethereum/event/exec_event_ctypes.h>
 #include <category/execution/ethereum/event/exec_event_recorder.hpp>
@@ -49,7 +53,9 @@
 #include <category/execution/ethereum/rlp/encode2.hpp>
 #include <category/execution/ethereum/state2/block_state.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
+#include <category/execution/ethereum/trace/call_frame.hpp>
 #include <category/execution/ethereum/trace/call_tracer.hpp>
+#include <category/execution/ethereum/trace/state_tracer.hpp>
 #include <category/execution/ethereum/validate_block.hpp>
 #include <category/execution/ethereum/validate_transaction.hpp>
 #include <category/execution/monad/chain/monad_chain.hpp>
@@ -57,8 +63,10 @@
 #include <category/execution/monad/reserve_balance.hpp>
 #include <category/execution/monad/validate_monad_transaction.hpp>
 #include <category/mpt/nibbles_view.hpp>
+#include <category/vm/evm/monad/revision.h>
 #include <category/vm/evm/switch_traits.hpp>
 #include <category/vm/evm/traits.hpp>
+#include <category/vm/vm.hpp>
 
 #include <monad/test/config.hpp>
 
@@ -80,14 +88,17 @@
 #include <memory>
 #include <test_resource_data.h>
 
+#include <ankerl/unordered_dense.h>
+
 #include <algorithm>
-#include <bit>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <optional>
 #include <span>
 #include <string>
+#include <variant>
 #include <vector>
 
 MONAD_ANONYMOUS_NAMESPACE_BEGIN
@@ -144,7 +155,7 @@ BlockHeader read_genesis_blockheader(nlohmann::json const &genesis_json)
 {
     BlockHeader block_header{};
 
-    block_header.difficulty = intx::from_string<uint256_t>(
+    block_header.difficulty = monad::from_string<uint256_t>(
         genesis_json["difficulty"].get<std::string>());
 
     auto const extra_data =
@@ -165,7 +176,7 @@ BlockHeader read_genesis_blockheader(nlohmann::json const &genesis_json)
 
     uint64_t const nonce{
         std::stoull(genesis_json["nonce"].get<std::string>(), nullptr, 0)};
-    intx::be::unsafe::store<uint64_t>(block_header.nonce.data(), nonce);
+    monad::be_store(block_header.nonce.data(), nonce);
 
     auto const parent_hash_byte_string =
         from_hex(genesis_json["parentHash"].get<std::string>());
@@ -190,7 +201,7 @@ BlockHeader read_genesis_blockheader(nlohmann::json const &genesis_json)
 
     // London fork
     if (genesis_json.contains("baseFeePerGas")) {
-        block_header.base_fee_per_gas = intx::from_string<uint256_t>(
+        block_header.base_fee_per_gas = monad::from_string<uint256_t>(
             genesis_json["baseFeePerGas"].get<std::string>());
     }
 
@@ -327,7 +338,7 @@ Result<BlockExecOutput> execute(
     auto &senders_and_authorities =
         senders_and_authorities_map[block.header.number];
 
-    ChainContext<traits> chain_context = [&] {
+    ChainContext<traits> const chain_context = [&] {
         if constexpr (is_monad_trait_v<traits>) {
             return ChainContext<traits>{
                 .grandparent_senders_and_authorities =
@@ -398,7 +409,7 @@ Result<std::vector<Receipt>> execute_and_record(
         block.header.parent_hash,
         block.header.number,
         0,
-        block.header.timestamp * 1'000'000'000UL,
+        uint128_t{block.header.timestamp} * uint128_t{1'000'000'000UL},
         size(block.transactions),
         std::nullopt,
         std::nullopt);
@@ -456,7 +467,8 @@ void process_test(
             from_hex<bytes32_t>(genesisJson.at("parentHash").get<std::string>())
                 .value());
 
-        std::optional<std::vector<Withdrawal>> withdrawals;
+        std::optional<std::vector<Withdrawal>>
+            withdrawals; // NOLINT(misc-const-correctness)
         if constexpr (traits::evm_rev() >= EVMC_SHANGHAI) {
             ASSERT_EQ(
                 NULL_ROOT,

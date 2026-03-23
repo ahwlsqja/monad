@@ -13,11 +13,12 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <category/core/int.hpp>
 #include <category/vm/core/assert.h>
 
 #include <test_resource_data.h>
 
-#include <test_resource_data.h>
+#include <test/vm/utils/test_memory.hpp>
 #include <test_vm.hpp>
 
 #include "benchmarktest.hpp"
@@ -28,8 +29,6 @@
 #include "host.hpp"
 #include "state.hpp"
 #include "test_state.hpp"
-
-#include <intx/intx.hpp>
 
 #include <benchmark/benchmark.h>
 
@@ -170,7 +169,7 @@ namespace
         vm_ptr->precompile_contract(
             rev, code_hash, code.data(), code.size(), impl);
 
-        for (auto _ : state) {
+        for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
             auto const result = evmc::Result{vm_ptr->execute(
                 interface, ctx, rev, &msg, code.data(), code.size())};
 
@@ -201,7 +200,7 @@ namespace
 
         auto const code = initial_test_state.get_account_code(msg.code_address);
 
-        for (auto _ : state) {
+        for (auto _ : state) { // NOLINT(clang-analyzer-deadcode.DeadStores)
             state.PauseTiming();
             auto evm_state = State{initial_test_state};
             touch_init_state(initial_test_state, evm_state);
@@ -241,13 +240,16 @@ namespace
         std::vector<std::uint8_t> const &code)
     {
         for (auto const impl : all_impls) {
-            benchmark::RegisterBenchmark(
-                std::format(
-                    "execute/{}/{}", name, BlockchainTestVM::impl_name(impl)),
-                run_benchmark,
-                impl,
-                msg,
-                code);
+            benchmark::
+                RegisterBenchmark( // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
+                    std::format(
+                        "execute/{}/{}",
+                        name,
+                        BlockchainTestVM::impl_name(impl)),
+                    run_benchmark,
+                    impl,
+                    msg,
+                    code);
         }
     }
 
@@ -300,7 +302,7 @@ namespace
                         .sender = tx.sender,
                         .input_data = tx.data.data(),
                         .input_size = tx.data.size(),
-                        .value = intx::be::store<evmc::uint256be>(tx.value),
+                        .value = monad::be_store_as<evmc::uint256be>(tx.value),
                         .create2_salt = {},
                         .code_address = recipient,
                         .memory_handle = test_memory.data,
@@ -318,18 +320,19 @@ namespace
                             test.name) == failure_tests.end();
 
                     for (auto const impl : all_impls) {
-                        benchmark::RegisterBenchmark(
-                            std::format(
-                                "execute/{}/{}/{}/{}",
-                                test.name,
-                                block_no,
-                                i,
-                                BlockchainTestVM::impl_name(impl)),
-                            run_benchmark_json,
-                            impl,
-                            test.pre_state,
-                            msg,
-                            assert_success);
+                        benchmark::
+                            RegisterBenchmark( // NOLINT(clang-analyzer-cplusplus.NewDeleteLeaks)
+                                std::format(
+                                    "execute/{}/{}/{}/{}",
+                                    test.name,
+                                    block_no,
+                                    i,
+                                    BlockchainTestVM::impl_name(impl)),
+                                run_benchmark_json,
+                                impl,
+                                test.pre_state,
+                                msg,
+                                assert_success);
                     }
                 }
             }

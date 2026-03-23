@@ -14,10 +14,14 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <category/core/assert.h>
+#include <category/core/byte_string.hpp>
+#include <category/core/config.hpp>
 #include <category/core/int.hpp>
 #include <category/core/likely.h>
+#include <category/core/result.hpp>
 #include <category/execution/ethereum/block_hash_buffer.hpp>
 #include <category/execution/ethereum/chain/chain.hpp>
+#include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/block.hpp>
 #include <category/execution/ethereum/core/transaction.hpp>
 #include <category/execution/ethereum/event/record_txn_events.hpp>
@@ -32,18 +36,25 @@
 #include <category/execution/ethereum/trace/state_tracer.hpp>
 #include <category/execution/ethereum/transaction_gas.hpp>
 #include <category/execution/ethereum/tx_context.hpp>
+#include <category/execution/ethereum/types/incarnation.hpp>
 #include <category/execution/ethereum/validate_transaction.hpp>
+#include <category/vm/evm/delegation.hpp>
 #include <category/vm/evm/explicit_traits.hpp>
 #include <category/vm/evm/switch_traits.hpp>
 #include <category/vm/evm/traits.hpp>
+#include <category/vm/memory_pool.hpp>
+#include <evmc/evmc.h>
+#include <evmc/evmc.hpp>
 
 #include <boost/fiber/future/promise.hpp>
 #include <boost/outcome/try.hpp>
-#include <intx/intx.hpp>
 
 #include <algorithm>
-#include <functional>
+#include <cstdint>
+#include <limits>
 #include <memory>
+#include <optional>
+#include <span>
 #include <utility>
 
 MONAD_ANONYMOUS_NAMESPACE_BEGIN
@@ -59,7 +70,7 @@ constexpr void irrevocable_change(
         state.set_nonce(sender, nonce + 1);
     }
 
-    uint256_t blob_gas = 0;
+    uint256_t blob_gas = 0; // NOLINT(misc-const-correctness)
     if constexpr (traits::evm_rev() >= EVMC_CANCUN) {
         blob_gas = (tx.type == TransactionType::eip4844)
                        ? calc_blob_fee(tx, excess_blob_gas)
@@ -92,7 +103,6 @@ template <Traits traits>
 uint64_t ExecuteTransactionNoValidation<traits>::process_authorizations(
     State &state, EvmcHost<traits> &host)
 {
-    using namespace intx::literals;
 
     MONAD_ASSERT(authorities_.size() == tx_.authorization_list.size());
 
@@ -105,7 +115,7 @@ uint64_t ExecuteTransactionNoValidation<traits>::process_authorizations(
         // 1. Verify the chain ID is 0 or the ID of the current chain.
         auto const &chain_id = *auth_entry.sc.chain_id;
         auto const host_chain_id =
-            intx::be::load<uint256_t>(host.get_tx_context()->chain_id);
+            uint256_t::be_load(host.get_tx_context()->chain_id);
 
         if (!(chain_id == 0 || chain_id == host_chain_id)) {
             continue;
@@ -211,7 +221,7 @@ evmc_message ExecuteTransactionNoValidation<traits>::to_message(
         .memory = msg_memory.get(),
         .memory_capacity = msg_memory_capacity,
     };
-    intx::be::store(msg.value.bytes, tx_.value);
+    be_store(msg.value.bytes, tx_.value);
     return msg;
 }
 
@@ -237,7 +247,7 @@ evmc::Result ExecuteTransactionNoValidation<traits>::operator()(
         header_.excess_blob_gas.value_or(0));
 
     // EIP-7702
-    uint64_t auth_refund = 0u;
+    uint64_t auth_refund = 0u; // NOLINT(misc-const-correctness)
     if constexpr (traits::evm_rev() >= EVMC_PRAGUE) {
         auth_refund = process_authorizations(state, host);
     }
@@ -388,7 +398,7 @@ Receipt ExecuteTransaction<traits>::execute_final(
         .gas_used = gas_used,
         .type = tx_.type};
     for (auto const &log : state.logs()) {
-        receipt.add_log(std::move(log));
+        receipt.add_log(log);
     }
 
     call_tracer_.on_finish(receipt.gas_used);

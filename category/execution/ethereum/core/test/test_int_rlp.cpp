@@ -15,6 +15,8 @@
 
 #include <category/core/byte_string.hpp>
 #include <category/core/int.hpp>
+#include <category/core/runtime/uint128.hpp>
+#include <category/core/runtime/uint256.hpp>
 #include <category/execution/ethereum/core/rlp/address_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/bytes_rlp.hpp>
 #include <category/execution/ethereum/core/rlp/int_rlp.hpp>
@@ -23,8 +25,6 @@
 #include <category/execution/ethereum/rlp/encode2.hpp>
 
 #include <evmc/evmc.hpp>
-
-#include <intx/intx.hpp>
 
 #include <gtest/gtest.h>
 
@@ -173,7 +173,8 @@ TEST(Rlp_Number, DecodeEncodeUnsigned)
 
 TEST(Rlp_Number, DecodeEncodeBigNumers)
 {
-    using namespace intx;
+    using monad::literals::operator""_u128;
+    using monad::literals::operator""_u256;
 
     // uint128_t
     {

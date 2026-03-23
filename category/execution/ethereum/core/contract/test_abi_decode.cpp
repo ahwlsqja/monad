@@ -14,7 +14,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <category/core/byte_string.hpp>
-#include <category/core/int.hpp>
+#include <category/core/bytes.hpp>
+#include <category/core/runtime/uint256.hpp>
 #include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/core/contract/abi_decode.hpp>
 #include <category/execution/ethereum/core/contract/abi_decode_error.hpp>
@@ -23,12 +24,10 @@
 
 #include <limits>
 
-#include <evmc/evmc.hpp>
 #include <gtest/gtest.h>
-#include <intx/intx.hpp>
 
 using namespace monad;
-using namespace intx::literals;
+using monad::literals::operator""_u256;
 
 template <typename T>
 class UintDecodeTest : public ::testing::Test
@@ -40,7 +39,7 @@ TYPED_TEST_SUITE(UintDecodeTest, UintTypes);
 
 TYPED_TEST(UintDecodeTest, uint)
 {
-    TypeParam expected{255};
+    TypeParam const expected{255};
     bytes32_t const encoded = abi_encode_uint<TypeParam>(expected);
     byte_string_view input{encoded};
     auto const decoded_res = abi_decode_fixed<TypeParam>(input);
@@ -51,7 +50,7 @@ TYPED_TEST(UintDecodeTest, uint)
 
 TYPED_TEST(UintDecodeTest, input_too_short)
 {
-    TypeParam expected{255};
+    TypeParam const expected{255};
     bytes32_t const encoded = abi_encode_uint<TypeParam>(expected);
     byte_string_view input = byte_string_view{encoded}.substr(1);
     auto const decoded_res = abi_decode_fixed<TypeParam>(input);
@@ -97,9 +96,9 @@ TYPED_TEST(UintDecodeTest, uint_higher_bits_ignored)
 
 TEST(AbiDecode, address)
 {
-    Address expected{{0xAA, 0xBB, 0xAA, 0xBB, 0xAA, 0xBB, 0xAA,
-                      0xBB, 0xAA, 0xBB, 0xAA, 0xBB, 0xAA, 0xBB,
-                      0xAA, 0xBB, 0xAA, 0xBB, 0xAA, 0xBB}};
+    Address const expected{{0xAA, 0xBB, 0xAA, 0xBB, 0xAA, 0xBB, 0xAA,
+                            0xBB, 0xAA, 0xBB, 0xAA, 0xBB, 0xAA, 0xBB,
+                            0xAA, 0xBB, 0xAA, 0xBB, 0xAA, 0xBB}};
     bytes32_t const encoded = abi_encode_address(expected);
     byte_string_view input{encoded};
     auto const decoded_res = abi_decode_fixed<Address>(input);
@@ -109,13 +108,13 @@ TEST(AbiDecode, address)
 
 TEST(AbiDecode, address_higher_bits_ignored)
 {
-    Address expected{{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                      0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                      0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}};
-    bytes32_t encoded{{0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
-                       0xCC, 0xCC, 0xCC, 0xCC, 0xFF, 0xFF, 0xFF, 0xFF,
-                       0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                       0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}};
+    Address const expected{{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}};
+    bytes32_t const encoded{{0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+                             0xCC, 0xCC, 0xCC, 0xCC, 0xFF, 0xFF, 0xFF, 0xFF,
+                             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                             0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}};
     byte_string_view input{encoded};
     auto const decoded_res = abi_decode_fixed<Address>(input);
     ASSERT_FALSE(decoded_res.has_error());

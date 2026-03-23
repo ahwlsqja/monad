@@ -13,50 +13,60 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <category/core/assert.h>
+#include <category/core/byte_string.hpp>
+#include <category/core/bytes.hpp>
 #include <category/core/hex.hpp>
 #include <category/core/int.hpp>
+#include <category/core/keccak.hpp>
 #include <category/execution/ethereum/block_hash_buffer.hpp>
+#include <category/execution/ethereum/chain/chain.hpp>
 #include <category/execution/ethereum/core/address.hpp>
-#include <category/execution/ethereum/core/contract/abi_encode.hpp>
 #include <category/execution/ethereum/core/contract/abi_signatures.hpp>
+#include <category/execution/ethereum/core/contract/big_endian.hpp>
+#include <category/execution/ethereum/core/transaction.hpp>
 #include <category/execution/ethereum/db/trie_db.hpp>
 #include <category/execution/ethereum/db/util.hpp>
 #include <category/execution/ethereum/evmc_host.hpp>
 #include <category/execution/ethereum/execute_transaction.hpp>
-#include <category/execution/ethereum/metrics/block_metrics.hpp>
+#include <category/execution/ethereum/reserve_balance.hpp>
 #include <category/execution/ethereum/state2/block_state.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
 #include <category/execution/ethereum/trace/call_tracer.hpp>
 #include <category/execution/ethereum/trace/state_tracer.hpp>
 #include <category/execution/ethereum/tx_context.hpp>
 #include <category/execution/monad/chain/monad_chain.hpp>
-#include <category/execution/monad/chain/monad_devnet.hpp>
-#include <category/execution/monad/chain/monad_mainnet.hpp>
 #include <category/execution/monad/monad_precompiles.hpp>
 #include <category/execution/monad/reserve_balance.h>
 #include <category/execution/monad/reserve_balance.hpp>
 #include <category/execution/monad/reserve_balance/reserve_balance_contract.hpp>
 #include <category/vm/code.hpp>
-#include <category/vm/compiler.hpp>
-#include <category/vm/compiler/types.hpp>
 #include <category/vm/evm/explicit_traits.hpp>
+#include <category/vm/evm/monad/revision.h>
 #include <category/vm/evm/opcodes.hpp>
 #include <category/vm/evm/traits.hpp>
-#include <category/vm/runtime/bin.hpp>
-#include <category/vm/utils/evm-as.hpp>
 #include <category/vm/vm.hpp>
 
 #include <monad/test/traits_test.hpp>
 #include <test/vm/utils/test_message.hpp>
 
 #include <ankerl/unordered_dense.h>
+#include <evmc/bytes.hpp>
+#include <evmc/evmc.h>
 #include <evmc/evmc.hpp>
-#include <intx/intx.hpp>
 
 #include <gtest/gtest.h>
 
+#include <array>
+#include <cstddef>
 #include <cstdint>
-#include <limits>
+#include <format>
+#include <initializer_list>
+#include <memory>
+#include <optional>
+#include <span>
+#include <utility>
+#include <vector>
 
 using namespace monad;
 using namespace monad::vm;
@@ -163,7 +173,7 @@ void add_revert_check(std::vector<uint8_t> &code)
 {
     u32_be selector = abi_encode_selector("dippedIntoReserve()");
     auto const *s = selector.bytes;
-    auto const *a = intx::as_bytes(RESERVE_BALANCE_CA);
+    auto const *a = as_bytes(RESERVE_BALANCE_CA);
     code.append_range(std::initializer_list<uint8_t>{
         PUSH32, s[0],  s[1],  s[2],  s[3],  0,     0,     0,     0,
         0,      0,     0,     0,     0,     0,     0,     0,     0,
@@ -203,7 +213,7 @@ void add_revert_check(std::vector<uint8_t> &code)
 void add_spend_code(uint64_t const value_mon, std::vector<uint8_t> &code)
 {
     uint256_t const value = uint256_t{value_mon} * 1000000000000000000ULL;
-    auto const *v = intx::as_bytes(value);
+    auto const *v = as_bytes(value);
     code.append_range(std::initializer_list<uint8_t>{
         PUSH0, PUSH0, PUSH0, PUSH0, PUSH32, v[31], v[30], v[29], v[28], v[27],
         v[26], v[25], v[24], v[23], v[22],  v[21], v[20], v[19], v[18], v[17],
@@ -215,8 +225,8 @@ void add_spend_code(uint64_t const value_mon, std::vector<uint8_t> &code)
 void add_call_code(
     uint256_t const &gas_fee, Address target, std::vector<uint8_t> &code)
 {
-    auto const *v = intx::as_bytes(target);
-    auto const *g = intx::as_bytes(gas_fee);
+    auto const *v = as_bytes(target);
+    auto const *g = as_bytes(gas_fee);
     code.append_range(std::initializer_list<uint8_t>{
         PUSH0, PUSH0, PUSH0, PUSH0, PUSH0, PUSH20, v[0],   v[1],  v[2],  v[3],
         v[4],  v[5],  v[6],  v[7],  v[8],  v[9],   v[10],  v[11], v[12], v[13],
@@ -248,7 +258,7 @@ void run_dipped_into_reserve_test(
     BlockState bs{tdb, vm};
     NoopCallTracer call_tracer;
     evmc_tx_context const tx_context{};
-    BlockHashBufferFinalized block_hash_buffer{};
+    BlockHashBufferFinalized const block_hash_buffer{};
 
     ASSERT_EQ(monad_default_max_reserve_balance_mon(traits::monad_rev()), 10);
 
@@ -295,17 +305,17 @@ void run_dipped_into_reserve_test(
     senders.push_back(BUNDLER);
     senders.emplace_back(BUNDLER);
     std::vector<std::vector<std::optional<Address>>> authorities = {};
-    authorities.push_back({});
-    authorities.push_back({});
+    authorities.emplace_back();
+    authorities.emplace_back();
 
     // Create sets for the new MonadChainContext structure
-    ankerl::unordered_dense::segmented_set<Address>
+    ankerl::unordered_dense::segmented_set<Address> const
         grandparent_senders_and_authorities;
-    ankerl::unordered_dense::segmented_set<Address>
+    ankerl::unordered_dense::segmented_set<Address> const
         parent_senders_and_authorities;
     ankerl::unordered_dense::segmented_set<Address> const
         senders_and_authorities = {EOA};
-    ChainContext<traits> chain_context{
+    ChainContext<traits> const chain_context{
         .grandparent_senders_and_authorities =
             grandparent_senders_and_authorities,
         .parent_senders_and_authorities = parent_senders_and_authorities,
@@ -656,7 +666,7 @@ TYPED_TEST(
     // clang-format on
 
     uint8_t const *s = selector.bytes;
-    std::vector<std::vector<uint8_t>> calldata_variants = {
+    std::vector<std::vector<uint8_t>> const calldata_variants = {
         {s[0], s[1], s[2]}, // too short
         {s[0], s[1], s[2], s[3]}, // correct selector
         {s[0], s[1], s[2], s[3], 0x00}, // too long
@@ -738,13 +748,14 @@ TYPED_TEST(
         std::array<uint8_t, 2> short2 = {s[0], s[1]};
         std::array<uint8_t, 1> short1 = {s[0]};
         std::array<uint8_t, 0> short0 = {};
-        std::vector<std::pair<uint8_t *, size_t>> short_calldata_variants = {
-            {short3.data(), short3.size()},
-            {short2.data(), short2.size()},
-            {short1.data(), short1.size()},
-            {short0.data(), short0.size()},
-            {nullptr, 0},
-        };
+        std::vector<std::pair<uint8_t *, size_t>> const
+            short_calldata_variants = {
+                {short3.data(), short3.size()},
+                {short2.data(), short2.size()},
+                {short1.data(), short1.size()},
+                {short0.data(), short0.size()},
+                {nullptr, 0},
+            };
         for (auto const &[data, size] : short_calldata_variants) {
             msg.input_data = data;
             msg.input_size = size;
@@ -767,7 +778,7 @@ TYPED_TEST(
 
         std::array<uint8_t, 4> wrong_selector = {0xFF, 0xFF, 0xFF, 0xFF};
         std::array<uint8_t, 5> wrong_too_long = {s[0], s[1], s[2], 0xFF, 0x00};
-        std::vector<std::pair<uint8_t *, size_t>> wrong_calldata = {
+        std::vector<std::pair<uint8_t *, size_t>> const wrong_calldata = {
             {wrong_selector.data(), wrong_selector.size()},
             {wrong_too_long.data(), wrong_too_long.size()},
         };
@@ -793,7 +804,7 @@ TYPED_TEST(
 
         std::array<uint8_t, 4> selector = {s[0], s[1], s[2], s[3]};
         std::array<uint8_t, 5> too_long = {s[0], s[1], s[2], s[3], 0x00};
-        std::vector<std::pair<uint8_t *, size_t>> wrong_calldata = {
+        std::vector<std::pair<uint8_t *, size_t>> const wrong_calldata = {
             {selector.data(), selector.size()},
             {too_long.data(), too_long.size()},
         };
@@ -819,7 +830,7 @@ TYPED_TEST(
 
     // Case 7: A well-formed call that should be accepted.
     {
-        evmc_message msg = make_msg();
+        evmc_message const msg = make_msg();
 
         init_reserve_balance_context<MonadTraits<MONAD_NEXT>>(
             this->state,
@@ -831,7 +842,7 @@ TYPED_TEST(
 
         std::array<uint8_t, 32> expected_message{};
 
-        std::string_view expected_message_view{
+        std::string_view const expected_message_view{
             reinterpret_cast<char const *>(expected_message.data()),
             expected_message.size(),
         };

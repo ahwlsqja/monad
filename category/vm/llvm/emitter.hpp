@@ -15,6 +15,7 @@
 
 #pragma once
 
+#include <category/core/int.hpp>
 #include <category/vm/evm/traits.hpp>
 #include <category/vm/llvm/dependency_blocks.hpp>
 #include <category/vm/llvm/llvm_state.hpp>
@@ -31,7 +32,6 @@
 #include <category/vm/runtime/storage.hpp>
 
 #include <evmc/evmc.hpp>
-#include <intx/intx.hpp>
 
 namespace monad::vm::runtime
 {
@@ -49,8 +49,8 @@ namespace monad::vm::runtime
         std::cerr << std::format("gas {}\n", *gas_p);
         std::cerr << std::format(
             "gas price {}\n",
-            intx::hex(intx::be::load<intx::uint256>(
-                ctx->env.tx_context->tx_gas_price)));
+            to_string(
+                uint256_t::be_load(ctx->env.tx_context->tx_gas_price), 16));
         std::cerr << std::format("stack:\n", *stack_begin);
         int i = 0;
         while (stack_begin < stack_top) {

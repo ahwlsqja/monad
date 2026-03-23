@@ -13,17 +13,20 @@
 // You should have received a copy of the GNU General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#include <category/core/bytes.hpp>
+#include <category/core/int.hpp>
+#include <category/execution/ethereum/core/address.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
 #include <category/execution/monad/staking/util/consensus_view.hpp>
 
-MONAD_STAKING_NAMESPACE_BEGIN
+MONAD_STAKING_NAMESPACE_BEGIN // NOLINT(misc-include-cleaner)
 
 ConsensusView::ConsensusView(
     State &state, Address const &address, bytes32_t const &key)
     : state_{state}
     , address_{address}
-    , key_{intx::be::load<uint256_t>(key)}
+    , key_{uint256_t::be_load(key)}
 {
 }
 
-MONAD_STAKING_NAMESPACE_END
+MONAD_STAKING_NAMESPACE_END // NOLINT(misc-include-cleaner)
