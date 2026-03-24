@@ -7,10 +7,14 @@ on:
     types: [created]
   pull_request_review:
     types: [submitted]
+  pull_request:
+    types: [opened, synchronize]
+
 jobs:
   check-permission:
     permissions: {}
     if: |
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude'))
@@ -30,9 +34,38 @@ jobs:
             });
             return ['admin', 'write'].includes(data.permission);
 
+  # Auto-review on PR open/synchronize
+  review:
+    needs: check-permission
+    if: |
+      needs.check-permission.outputs.has-write == 'true' &&
+      github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Run Claude Code
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          claude_args: "--model claude-opus-4-6 --max-turns 10 --allowedTools Bash,Read,Glob,Grep"
+          prompt: "Review this pull request for code quality, correctness, and security. Analyze the diff, then post your findings as review comments."
+
+  # On-demand @claude mentions
   claude:
     needs: check-permission
-    if: needs.check-permission.outputs.has-write == 'true'
+    if: |
+      needs.check-permission.outputs.has-write == 'true' &&
+      github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
