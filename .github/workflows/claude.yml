@@ -10,6 +10,15 @@ on:
   pull_request:
     types: [opened, synchronize]
 
+concurrency:
+  group: >
+    ${{
+      github.event_name == 'pull_request'
+      && format('claude-pr-{0}', github.event.pull_request.number)
+      || format('claude-{0}', github.run_id)
+    }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   check-permission:
     permissions: {}
@@ -57,7 +66,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          claude_args: "--model claude-opus-4-6 --max-turns 10 --allowedTools Bash,Read,Glob,Grep"
+          claude_args: "--model claude-opus-4-6 --max-turns 30 --allowedTools Bash,Read,Glob,Grep"
           prompt: "Review this pull request for code quality, correctness, and security. Analyze the diff, then post your findings as review comments."
 
   # On-demand @claude mentions
@@ -84,4 +93,4 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          claude_args: "--model claude-opus-4-6"
+          claude_args: "--model claude-opus-4-6 --max-turns 30"
