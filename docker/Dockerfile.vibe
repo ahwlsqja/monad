@@ -1,0 +1,78 @@
+# Dockerfile.vibe — WSL2-optimized build for category-labs/monad
+# Constraints: 12GB RAM, no --security=insecure, gcc-15 only
+# Usage: docker build -f docker/Dockerfile.vibe -t vibe-room-monad:build .
+
+# ============================================================
+# Stage 1: Base image with system dependencies
+# ============================================================
+FROM ubuntu:25.10 AS base
+
+COPY scripts/ubuntu-build/ /opt
+
+RUN apt-get update && \
+    apt-get upgrade -y && \
+    /opt/install-boost.sh && \
+    /opt/install-tools.sh && \
+    /opt/install-deps.sh && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
+    rm -rf /opt
+
+# ============================================================
+# Stage 2: Build + test (gcc-15, RelWithDebInfo, -j2)
+# ============================================================
+FROM base AS build
+
+COPY . /src
+WORKDIR /src
+
+# gcc-15 only (no clang matrix)
+ENV CC=gcc-15
+ENV CXX=g++-15
+ENV CMAKE_BUILD_TYPE=RelWithDebInfo
+
+# Configure with cmake — haswell march is safe for Zen 2+
+RUN CFLAGS="-march=haswell" \
+    CXXFLAGS="-march=haswell" \
+    ASMFLAGS="-march=haswell" \
+    cmake \
+      -DCMAKE_EXPORT_COMPILE_COMMANDS:BOOL=TRUE \
+      -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE} \
+      -DCMAKE_C_COMPILER=${CC} \
+      -DCMAKE_CXX_COMPILER=${CXX} \
+      -B build \
+      -G Ninja
+
+# Build with -j2 to stay within 12GB RAM
+RUN VERBOSE=1 cmake --build build --config ${CMAKE_BUILD_TYPE} -- -j2
+
+# Run tests, excluding io_uring/hugepage/async_io which need --security=insecure
+# || true ensures the image is produced even if some tests fail
+RUN ctest --output-on-failure \
+      --timeout 500 \
+      --test-dir build \
+      -E "(io_uring|hugepage|async_io)" \
+      -j2 2>&1 | tee build/ctest-results.log || true
+
+# ============================================================
+# Stage 3: Runner — slim image with binaries
+# ============================================================
+FROM ubuntu:25.10 AS runner
+
+# Install minimal runtime deps
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      libboost-fiber1.83.0 \
+      libboost-json1.83.0 \
+      libboost-stacktrace1.83.0 \
+      libtbb12 \
+      libzstd1 \
+      libgmp10 && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /src/build/cmd/monad /usr/local/bin/
+COPY --from=build /src/build/cmd/monad-cli /usr/local/bin/
+COPY --from=build /src/build/ctest-results.log /var/log/ctest-results.log
+
+ENTRYPOINT ["/usr/local/bin/monad"]
