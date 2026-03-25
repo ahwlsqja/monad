@@ -252,16 +252,16 @@ init_state(ParsedInput const &input)
     }
 
     for (auto const &addr : unique_senders) {
-        StateDeltas::accessor acc;
-        genesis_deltas.insert(acc, addr);
-        acc->second = StateDelta{
-            .account = AccountDelta{
-                std::nullopt,
-                Account{
-                    .balance = prefund_balance,
-                    .code_hash = NULL_HASH,
-                    .nonce = 0}},
-            .storage = {}};
+        genesis_deltas.insert(StateDeltas::value_type{
+            addr,
+            StateDelta{
+                .account = AccountDelta{
+                    std::nullopt,
+                    Account{
+                        .balance = prefund_balance,
+                        .code_hash = NULL_HASH,
+                        .nonce = 0}},
+                .storage = {}}});
     }
 
     Code empty_code;
@@ -393,7 +393,7 @@ static json format_output(
         tx_result["gas_used"] = gas_used;
         tx_result["output"] = "0x"; // output not easily extractable from Receipt
         tx_result["error"] = (receipt.status == 1) ? json(nullptr) : json("execution failed");
-        tx_result["logs_count"] = receipt.logs_bloom.size() > 0 ? receipt.logs.size() : 0;
+        tx_result["logs_count"] = receipt.logs.size();
         results_arr.push_back(tx_result);
     }
     output["results"] = results_arr;
