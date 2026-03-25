@@ -291,8 +291,8 @@ execute(ExecutionContext &ctx, ParsedInput const &input)
 {
     auto const num_txs = input.transactions.size();
 
-    // Build Block
-    Block block;
+    // Build Block — value-init to zero all members (gcc-15 -Werror=maybe-uninitialized)
+    Block block{};
     block.header = input.header;
     block.transactions = input.transactions;
 
