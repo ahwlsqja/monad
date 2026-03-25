@@ -265,10 +265,15 @@ init_state(ParsedInput const &input)
     }
 
     Code empty_code;
+    // block_id for genesis: NULL_HASH_BLAKE3 when number==0, bytes32_t{number} otherwise
+    bytes32_t const genesis_block_id = NULL_HASH_BLAKE3;
+    BlockHeader genesis_header{};
+    genesis_header.number = 0;
     ctx->tdb.commit(
-        genesis_deltas, empty_code, bytes32_t{},
-        BlockHeader{.number = 0});
-    ctx->tdb.finalize(0, bytes32_t{});
+        genesis_deltas, empty_code, genesis_block_id,
+        genesis_header);
+    ctx->tdb.finalize(0, genesis_block_id);
+    ctx->tdb.set_block_and_prefix(0);
 
     ctx->block_state = std::make_unique<BlockState>(ctx->tdb, ctx->vm);
 
