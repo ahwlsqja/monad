@@ -53,6 +53,14 @@ target_compile_definitions(monad PRIVATE GIT_COMMIT_HASH="${GIT_COMMIT_HASH}")
 target_compile_definitions(monad-cli
                            PRIVATE GIT_COMMIT_HASH="${GIT_COMMIT_HASH}")
 
+# Vibe-Room headless CLI for parallel EVM execution with instrumentation
+add_executable(monad-vibe-cli vibe_cli.cpp)
+monad_compile_options(monad-vibe-cli)
+target_link_libraries(monad-vibe-cli PRIVATE monad_execution nlohmann_json::nlohmann_json)
+target_compile_definitions(monad-vibe-cli
+                           PRIVATE GIT_COMMIT_HASH="${GIT_COMMIT_HASH}"
+                                   VIBE_ROOM_INSTRUMENTATION)
+
 add_subdirectory(vm/parser)
 
 if(MONAD_COMPILER_BENCHMARKS)

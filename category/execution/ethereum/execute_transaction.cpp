@@ -28,6 +28,10 @@
 #include <category/execution/ethereum/state2/block_state.hpp>
 #include <category/execution/ethereum/state3/state.hpp>
 #include <category/execution/ethereum/trace/call_tracer.hpp>
+
+#ifdef VIBE_ROOM_INSTRUMENTATION
+#include <category/execution/ethereum/metrics/vibe_instrumentation.hpp>
+#endif
 #include <category/execution/ethereum/trace/event_trace.hpp>
 #include <category/execution/ethereum/trace/state_tracer.hpp>
 #include <category/execution/ethereum/transaction_gas.hpp>
@@ -407,6 +411,10 @@ Result<Receipt> ExecuteTransaction<traits>::operator()()
 {
     TRACE_TXN_EVENT(StartTxn);
 
+#ifdef VIBE_ROOM_INSTRUMENTATION
+    auto const exec_start = std::chrono::steady_clock::now();
+#endif
+
     {
         auto validation_result = static_validate_transaction<traits>(
             tx_,
@@ -438,6 +446,21 @@ Result<Receipt> ExecuteTransaction<traits>::operator()()
             if (result.has_error()) {
                 return std::move(result.error());
             }
+#ifdef VIBE_ROOM_INSTRUMENTATION
+            // Capture R/W sets BEFORE merge — merge destroys per-tx data
+            if (block_metrics_.instrumentation) {
+                auto const exec_time = std::chrono::duration_cast<
+                    std::chrono::microseconds>(
+                    std::chrono::steady_clock::now() - exec_start);
+                TxInstrumentationData data;
+                data.tx_index = static_cast<uint32_t>(i_);
+                data.incarnation_count = 1;
+                data.exec_time = exec_time;
+                data.reads = extract_reads(state);
+                data.writes = extract_writes(state);
+                block_metrics_.instrumentation->add_tx_data(std::move(data));
+            }
+#endif
             auto const receipt = execute_final(state, result.value());
             block_state_.merge(state);
             return receipt;
@@ -457,6 +480,21 @@ Result<Receipt> ExecuteTransaction<traits>::operator()()
         if (result.has_error()) {
             return std::move(result.error());
         }
+#ifdef VIBE_ROOM_INSTRUMENTATION
+        // Retry path: incarnation=2, capture R/W sets before merge
+        if (block_metrics_.instrumentation) {
+            auto const exec_time = std::chrono::duration_cast<
+                std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - exec_start);
+            TxInstrumentationData data;
+            data.tx_index = static_cast<uint32_t>(i_);
+            data.incarnation_count = 2; // retried
+            data.exec_time = exec_time;
+            data.reads = extract_reads(state);
+            data.writes = extract_writes(state);
+            block_metrics_.instrumentation->add_tx_data(std::move(data));
+        }
+#endif
         auto const receipt = execute_final(state, result.value());
         block_state_.merge(state);
         return receipt;

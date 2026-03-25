@@ -21,10 +21,15 @@
 
 MONAD_NAMESPACE_BEGIN
 
+struct BlockInstrumentationData; // forward decl
+
 struct BlockMetrics
 {
     uint32_t num_retries{0};
     std::chrono::microseconds tx_exec_time{1};
+#ifdef VIBE_ROOM_INSTRUMENTATION
+    BlockInstrumentationData *instrumentation{nullptr};
+#endif
 };
 
 MONAD_NAMESPACE_END
