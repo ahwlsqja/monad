@@ -285,7 +285,8 @@ target_include_directories(
 
 target_compile_definitions(
   monad_execution_ethereum PUBLIC MONAD_CXX_CTYPES_USE_EVMC_HPP
-                                  MONAD_CXX_CTYPES_USE_INTX)
+                                  MONAD_CXX_CTYPES_USE_INTX
+                                  VIBE_ROOM_INSTRUMENTATION)
 
 target_compile_definitions(
   monad_execution_native PUBLIC MONAD_CXX_CTYPES_USE_EVMC_HPP
